@@ -1,0 +1,30 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 每天 UTC 时间 18:01 运行，即北京时间凌晨 2:01
+    - cron: '1 18 * * *'
+  # 允许你手动在 GitHub Actions 页面触发运行
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v3
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync upstream changes
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
+        with:
+          # 必填：上游（原始）仓库的地址
+          upstream_sync_repo: afredzhousolution/agentic-inbox
+          # 必填：上游仓库的分支
+          upstream_sync_branch: main
+          # 必填：你 Fork 仓库的目标分支
+          target_sync_branch: main
+          # 必填：使用 GitHub 自动生成的令牌来完成推送操作
+          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
