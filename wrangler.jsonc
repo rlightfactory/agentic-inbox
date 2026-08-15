@@ -16,12 +16,6 @@
 		"DOMAINS": "imagetolayers.com,lighttherapyfactory.com,lyrictomelodyai.com",
 		"EMAIL_ADDRESSES": []
 	},
-	"send_email": [
-		{
-			"name": "EMAIL",
-			"remote": true
-		}
-	],
 	"r2_buckets": [
 		{
 			"binding": "BUCKET",
