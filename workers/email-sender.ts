@@ -2,13 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-/**
- * Email sending via Cloudflare Email Service binding.
- *
- * Uses the `send_email` Worker binding (`env.EMAIL.send()`) to send emails.
- *
- * See: https://developers.cloudflare.com/email-service/api/send-emails/workers-api/
- */
+/** Email sending via the Brevo transactional email HTTP API. */
 
 export interface SendEmailParams {
 	to: string | string[];
@@ -29,44 +23,91 @@ export interface SendEmailParams {
 	headers?: Record<string, string>;
 }
 
+interface BrevoSendResponse {
+	messageId?: string;
+	messageIds?: string[];
+	code?: string;
+	message?: string;
+}
+
+interface BrevoContact {
+	email: string;
+	name?: string;
+}
+
+function toContact(address: string | { email: string; name: string }): BrevoContact {
+	if (typeof address === "string") return { email: address };
+	return {
+		email: address.email,
+		name: address.name.replace(/[\r\n]/g, " "),
+	};
+}
+
+function toContacts(addresses: string | string[]): BrevoContact[] {
+	return (Array.isArray(addresses) ? addresses : [addresses]).map((email) => ({ email }));
+}
+
 /**
- * Send an email using the Cloudflare Email Service binding.
+ * Send an email using Brevo.
  *
- * @param binding  - The `EMAIL` SendEmail binding from env
+ * @param apiKey - Brevo API key from the `BREVO_API_KEY` Worker secret
  * @param params   - Email parameters (to, from, subject, body, etc.)
- * @returns The send result with messageId
- * @throws On validation or delivery errors (error has `.code` property)
+ * @returns The Brevo message ID
+ * @throws When configuration, validation, or API delivery acceptance fails
  */
 export async function sendEmail(
-	binding: SendEmail,
+	apiKey: string,
 	params: SendEmailParams,
 ): Promise<{ messageId: string }> {
+	if (!apiKey) {
+		throw new Error("BREVO_API_KEY is not configured");
+	}
+
 	const message: Record<string, unknown> = {
-		to: params.to,
-		from: params.from,
+		to: toContacts(params.to),
+		sender: toContact(params.from),
 		subject: params.subject,
 	};
 
-	if (params.html) message.html = params.html;
-	if (params.text) message.text = params.text;
-	if (params.cc) message.cc = params.cc;
-	if (params.bcc) message.bcc = params.bcc;
-	if (params.replyTo) message.replyTo = params.replyTo;
+	if (params.html) message.htmlContent = params.html;
+	if (params.text) message.textContent = params.text;
+	if (params.cc) message.cc = toContacts(params.cc);
+	if (params.bcc) message.bcc = toContacts(params.bcc);
+	if (params.replyTo) message.replyTo = toContact(params.replyTo);
 
 	if (params.headers && Object.keys(params.headers).length > 0) {
 		message.headers = params.headers;
 	}
 
 	if (params.attachments && params.attachments.length > 0) {
-		message.attachments = params.attachments.map((att) => ({
+		message.attachment = params.attachments.map((att) => ({
 			content: att.content,
-			filename: att.filename,
-			type: att.type,
-			disposition: att.disposition,
-			...(att.contentId ? { contentId: att.contentId } : {}),
+			name: att.filename,
 		}));
 	}
 
-	const result = await binding.send(message as any);
-	return { messageId: result.messageId };
+	const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+		method: "POST",
+		headers: {
+			"api-key": apiKey,
+			Accept: "application/json",
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(message),
+	});
+
+	let result: BrevoSendResponse;
+	try {
+		result = await response.json<BrevoSendResponse>();
+	} catch {
+		throw new Error(`Brevo returned an invalid response (HTTP ${response.status})`);
+	}
+
+	const messageId = result.messageId || result.messageIds?.[0];
+	if (!response.ok || !messageId) {
+		const detail = result.message || result.code || response.statusText;
+		throw new Error(`Brevo send failed (HTTP ${response.status}): ${detail}`);
+	}
+
+	return { messageId };
 }
