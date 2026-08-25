@@ -6,6 +6,7 @@ import { Banner, Button, Input } from "@cloudflare/kumo";
 import { FloppyDiskIcon, PaperPlaneTiltIcon, XIcon } from "@phosphor-icons/react";
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
+import AttachmentPicker from "./AttachmentPicker";
 import RichTextEditor from "./RichTextEditor";
 
 export default function ComposePanel() {
@@ -27,6 +28,9 @@ export default function ComposePanel() {
 		setSubject,
 		body,
 		setBody,
+		attachments,
+		addAttachments,
+		removeAttachment,
 		error,
 		isSavingDraft,
 		isSending,
@@ -144,8 +148,15 @@ export default function ComposePanel() {
 						<RichTextEditor
 							value={body}
 							onChange={setBody}
+							onAttach={addAttachments}
 						/>
 					</div>
+
+					<AttachmentPicker
+						attachments={attachments}
+						onRemove={removeAttachment}
+						disabled={isSending}
+					/>
 				</div>
 
 				{/* Footer actions */}

@@ -6,6 +6,7 @@ import { Banner, Button, Dialog, Input, Text } from "@cloudflare/kumo";
 import { FloppyDiskIcon, PaperPlaneTiltIcon } from "@phosphor-icons/react";
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
+import AttachmentPicker from "./AttachmentPicker";
 import RichTextEditor from "./RichTextEditor";
 import { useUIStore } from "~/hooks/useUIStore";
 
@@ -30,6 +31,9 @@ export default function ComposeEmail() {
 		setSubject,
 		body,
 		setBody,
+		attachments,
+		addAttachments,
+		removeAttachment,
 		error,
 		isSavingDraft,
 		isSending,
@@ -104,8 +108,13 @@ export default function ComposeEmail() {
 						<Text size="sm" DANGEROUS_className="font-medium mb-1.5 block">
 							Message
 						</Text>
-						<RichTextEditor value={body} onChange={setBody} />
+						<RichTextEditor value={body} onChange={setBody} onAttach={addAttachments} />
 					</div>
+					<AttachmentPicker
+						attachments={attachments}
+						onRemove={removeAttachment}
+						disabled={isSending}
+					/>
 					<div className="flex justify-between items-center pt-2">
 						<Button
 							type="button"

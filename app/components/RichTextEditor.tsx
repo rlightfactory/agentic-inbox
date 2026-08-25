@@ -11,6 +11,7 @@ import {
 	ListBulletsIcon,
 	ListNumbersIcon,
 	MinusIcon,
+	PaperclipIcon,
 	QuotesIcon,
 	TextBIcon,
 	TextItalicIcon,
@@ -26,17 +27,21 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 interface RichTextEditorProps {
 	value: string;
 	onChange: (value: string) => void;
+	/** When provided, a paperclip button appears in the toolbar to attach files. */
+	onAttach?: (files: FileList) => void;
 }
 
 export default function RichTextEditor({
 	value,
 	onChange,
+	onAttach,
 }: RichTextEditorProps) {
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const editor = useEditor({
 		extensions: [
 			StarterKit,
@@ -202,6 +207,33 @@ export default function RichTextEditor({
 						aria-label="Horizontal rule"
 					/>
 				</Tooltip>
+
+				{onAttach && (
+					<>
+						<input
+							ref={fileInputRef}
+							type="file"
+							multiple
+							className="hidden"
+							onChange={(e) => {
+								if (e.target.files && e.target.files.length > 0) {
+									onAttach(e.target.files);
+								}
+								e.target.value = "";
+							}}
+						/>
+						<Tooltip content="Attach file" side="bottom" asChild>
+							<Button
+								variant="ghost"
+								shape="square"
+								size="sm"
+								icon={<PaperclipIcon size={16} />}
+								onClick={() => fileInputRef.current?.click()}
+								aria-label="Attach file"
+							/>
+						</Tooltip>
+					</>
+				)}
 
 				<div className="mx-1 h-5 w-px bg-kumo-fill" />
 
