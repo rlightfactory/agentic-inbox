@@ -43,6 +43,40 @@ interface ComposeFormFields {
 	body: string;
 }
 
+/**
+ * A local file the user attached in the compose form. `content` is the
+ * base64-encoded file data (no data-URL prefix), matching the shape the
+ * send/reply/forward API expects.
+ */
+export interface ComposeAttachment {
+	content: string;
+	filename: string;
+	type: string;
+	size: number;
+	disposition: "attachment";
+}
+
+// Brevo caps total attachment payload; keep a conservative per-message limit.
+const MAX_ATTACHMENTS_BYTES = 10 * 1024 * 1024;
+
+/** Read a File into a base64 string (without the `data:...;base64,` prefix). */
+function readFileAsBase64(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => {
+			const result = reader.result;
+			if (typeof result !== "string") {
+				reject(new Error("Failed to read file"));
+				return;
+			}
+			const commaIdx = result.indexOf(",");
+			resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+		};
+		reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+		reader.readAsDataURL(file);
+	});
+}
+
 const EMPTY_FIELDS: ComposeFormFields = {
 	to: "",
 	cc: "",
@@ -178,6 +212,7 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 	const [showCcBcc, setShowCcBcc] = useState(false);
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
+	const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [isSavingDraft, setIsSavingDraft] = useState(false);
 	const [isSending, setIsSending] = useState(false);
@@ -207,7 +242,44 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		setShowCcBcc(initialFields.showCcBcc);
 		setSubject(initialFields.subject);
 		setBody(initialFields.body);
+		setAttachments([]);
 	}, [composeOptions, currentMailbox?.email, sigBlock]);
+
+	const addAttachments = async (files: FileList | File[]) => {
+		const fileList = Array.from(files);
+		if (fileList.length === 0) return;
+		setError(null);
+		try {
+			const encoded = await Promise.all(
+				fileList.map(async (file) => ({
+					content: await readFileAsBase64(file),
+					filename: file.name,
+					type: file.type || "application/octet-stream",
+					size: file.size,
+					disposition: "attachment" as const,
+				})),
+			);
+			setAttachments((prev) => {
+				const next = [...prev, ...encoded];
+				const total = next.reduce((sum, a) => sum + a.size, 0);
+				if (total > MAX_ATTACHMENTS_BYTES) {
+					const message = "Attachments exceed the 10 MB total limit.";
+					setError(message);
+					toastManager.add({ title: message, variant: "error" });
+					return prev;
+				}
+				return next;
+			});
+		} catch {
+			const message = "Failed to read one or more attachments.";
+			setError(message);
+			toastManager.add({ title: message, variant: "error" });
+		}
+	};
+
+	const removeAttachment = (index: number) => {
+		setAttachments((prev) => prev.filter((_, i) => i !== index));
+	};
 
 	const handleSaveDraft = async () => {
 		if (!mailboxId || isSending) return; setIsSavingDraft(true); setError(null);
@@ -248,6 +320,16 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			subject,
 			html: body,
 			text: htmlToPlainText(body),
+			...(attachments.length > 0
+				? {
+						attachments: attachments.map(({ content, filename, type, disposition }) => ({
+							content,
+							filename,
+							type,
+							disposition,
+						})),
+					}
+				: {}),
 		};
 		const draftId = composeOptions.draftEmail?.id; const mode = composeOptions.mode; const originalId = composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to;
 		setIsSending(true); toastManager.add({ title: "Sending email..." });
@@ -262,5 +344,5 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 		finally { setIsSending(false); }
 	};
 
-	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
+	return { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, setSubject, body, setBody, attachments, addAttachments, removeAttachment, error, setError, isSavingDraft, isSending, formTitle, handleSaveDraft, handleSend, closeCompose, closePanel };
 }
