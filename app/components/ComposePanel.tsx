@@ -148,12 +148,12 @@ export default function ComposePanel() {
 						<RichTextEditor
 							value={body}
 							onChange={setBody}
+							onAttach={addAttachments}
 						/>
 					</div>
 
 					<AttachmentPicker
 						attachments={attachments}
-						onAdd={addAttachments}
 						onRemove={removeAttachment}
 						disabled={isSending}
 					/>

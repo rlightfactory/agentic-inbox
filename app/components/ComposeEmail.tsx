@@ -108,11 +108,10 @@ export default function ComposeEmail() {
 						<Text size="sm" DANGEROUS_className="font-medium mb-1.5 block">
 							Message
 						</Text>
-						<RichTextEditor value={body} onChange={setBody} />
+						<RichTextEditor value={body} onChange={setBody} onAttach={addAttachments} />
 					</div>
 					<AttachmentPicker
 						attachments={attachments}
-						onAdd={addAttachments}
 						onRemove={removeAttachment}
 						disabled={isSending}
 					/>
