@@ -32,6 +32,36 @@ import {
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
 import type { Env } from "../types";
 
+// Kimi K2.5 is deprecated and is transparently aliased by Cloudflare to the
+// paid-plan K2.6 model. GLM 4.7 Flash remains available on Workers Free and
+// supports the multi-turn function calling this email agent needs.
+const AGENT_MODEL = "@cf/zai-org/glm-4.7-flash";
+
+const MANUAL_CHAT_RULES = `## Runtime interaction rules
+Messages beginning with "[Auto-triggered]" or "A new email just arrived." are automatic events. For those events, create a draft with draft_reply and do not add chat commentary.
+All other user messages are manual operator requests. For manual requests, answer directly in chat. You may read, search, translate, summarize, and explain emails with the available tools. Do not return an empty response, and do not create a draft unless the operator asks for one.`;
+
+function serializeError(error: unknown): Record<string, unknown> {
+	if (!(error instanceof Error)) return { value: String(error) };
+
+	const details: Record<string, unknown> = {
+		name: error.name,
+		message: error.message,
+		stack: error.stack,
+	};
+	for (const key of Object.getOwnPropertyNames(error)) {
+		if (key in details) continue;
+		const value = (error as unknown as Record<string, unknown>)[key];
+		details[key] = value instanceof Error ? serializeError(value) : value;
+	}
+	if (error.cause !== undefined) {
+		details.cause = error.cause instanceof Error
+			? serializeError(error.cause)
+			: error.cause;
+	}
+	return details;
+}
+
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
 function defineTool(def: {
@@ -62,19 +92,19 @@ Write like a real person. Short, direct, flowing prose. Get to the point. Plain 
 - Don't structure replies like a template or form letter. Just talk normally.
 
 **Agent Behavior Rules (CRITICAL):**
-- NEVER output meta-commentary about what you are doing (e.g. do not say "I am drafting a reply to Alex", "I checked the thread", etc).
-- When a new email arrives, your ONLY job is to call the \`draft_reply\` tool.
-- DO NOT summarize the email. DO NOT explain your actions.
-- Output NOTHING except the tool call. If you must output text, it should ONLY be the literal draft text itself if tools fail.
+- Distinguish manual operator chat from an automatic new-email event.
+- A manual operator message may ask you to read, translate, summarize, explain, search, or organize email. Answer that request directly in chat and use the read/search tools as needed. Do not create a draft unless the operator asks for one.
+- An automatic new-email event is explicitly marked by a message beginning with "A new email just arrived." For that event only, your ONLY job is to call the \`draft_reply\` tool. Do not summarize the email or explain your actions, and output nothing except the tool call.
+- When drafting, never output meta-commentary about what you are doing (for example, do not put "I am drafting a reply to Alex" in the draft).
 - Before drafting ANY reply, carefully read the full thread history.
 - NEVER repeat information that was already shared in a prior message in the thread.
-- Your reply should only contain NEW information or directly respond to what the person just said. Move the conversation forward, don't rehash it.
+- A drafted reply should only contain NEW information or directly respond to what the person just said. Move the conversation forward, don't rehash it.
 
 ## Who Are You Replying To?
 Use the name the person gives in their email body / signature. That's their name - use it. The "from" address is where you send the reply, but the name in the email is how you greet them.
 
 ## CRITICAL: Draft Only - Never Send
-You can ONLY draft emails. You do NOT have the ability to send emails directly.
+You may read, search, summarize, explain, and organize email in manual operator chat. For outbound content, you can ONLY draft emails; you do NOT have the ability to send emails directly.
 
 - Use draft_reply to draft replies to existing emails
 - Use draft_email to draft new outbound emails
@@ -98,7 +128,9 @@ async function getSystemPrompt(env: Env, mailboxId: string): Promise<string> {
 		if (obj) {
 			const settings = await obj.json<Record<string, unknown>>();
 			if (typeof settings.agentSystemPrompt === "string" && settings.agentSystemPrompt.trim()) {
-				return settings.agentSystemPrompt;
+				// Mailbox customization must not replace the runtime contract that
+				// distinguishes manual questions from automatic draft events.
+				return `${settings.agentSystemPrompt.trim()}\n\n${MANUAL_CHAT_RULES}`;
 			}
 		}
 	} catch {
@@ -279,13 +311,31 @@ export class EmailAgent extends AIChatAgent<any> {
 		const workersai = createWorkersAI({ binding: env.AI });
 		const tools = createEmailTools(env, mailboxId);
 		const systemPrompt = await getSystemPrompt(env, mailboxId);
+		const recentMessages = this.messages
+			.filter((message) => {
+				const text = message.parts
+					.map((part) => part.type === "text" ? part.text : "")
+					.join("\n")
+					.trim();
+				if (!text && message.role === "assistant") return false;
+				if (text.startsWith("[Auto-triggered]")) return false;
+				if (text.includes("Blocked auto-draft creation:")) return false;
+				return true;
+			})
+			.slice(-12);
 
 		const result = streamText({
-			model: workersai("@cf/moonshotai/kimi-k2.5"),
-			system: systemPrompt,
-			messages: await convertToModelMessages(this.messages),
+			model: workersai(AGENT_MODEL),
+			system: `${systemPrompt}\n\n${MANUAL_CHAT_RULES}`,
+			messages: await convertToModelMessages(recentMessages),
 			tools,
 			stopWhen: stepCountIs(5),
+			onError: ({ error }) => {
+				console.error("Agent chat model stream failed", JSON.stringify({
+					model: AGENT_MODEL,
+					error: serializeError(error),
+				}));
+			},
 			onFinish,
 		});
 
@@ -488,7 +538,7 @@ Based on the email content and thread context above, draft a reply using draft_r
 
 		try {
 			const result = await generateText({
-				model: workersai("@cf/moonshotai/kimi-k2.5"),
+				model: workersai(AGENT_MODEL),
 				system: systemPrompt,
 				messages: await convertToModelMessages(messages),
 				tools,

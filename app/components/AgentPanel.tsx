@@ -308,7 +308,7 @@ function AgentChatConnected({
 	const { startCompose } = useUIStore();
 
 	const agent = useAgent({ agent: "EmailAgent", name: mailboxId });
-	const { messages, sendMessage, status, setMessages, stop } =
+	const { messages, sendMessage, status, clearHistory, stop, error } =
 		useAgentChat({ agent });
 	const isStreaming = status === "streaming" || status === "submitted";
 
@@ -363,7 +363,7 @@ function AgentChatConnected({
 								icon={<TrashIcon size={14} />}
 								onClick={() => {
 									if (window.confirm("Clear chat history?")) {
-										setMessages([]);
+										clearHistory();
 									}
 								}}
 								aria-label="Clear chat"
@@ -375,6 +375,14 @@ function AgentChatConnected({
 
 			{/* Messages */}
 			<div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
+				{error && (
+					<div
+						role="alert"
+						className="mb-3 rounded-lg border border-kumo-error/30 bg-kumo-error/10 px-3 py-2 text-xs text-kumo-error break-words"
+					>
+						Agent request failed: {error.message || "Unknown streaming error"}
+					</div>
+				)}
 				{messages.length === 0 ? (
 					<div className="flex flex-col items-center justify-center h-full gap-4">
 						<div className="flex h-12 w-12 items-center justify-center rounded-xl bg-kumo-brand/10">

@@ -40,11 +40,35 @@ Answer: YES
 
 Respond with exactly one word: YES or NO. Default to NO unless the email clearly targets the assistant.`;
 
+/**
+ * Only send plausibly adversarial mail to the probabilistic classifier.
+ *
+ * Running a small language model over every support email produced too many
+ * false positives (for example, ordinary reports saying that "the agent got
+ * stuck").  These patterns deliberately look for an instruction directed at
+ * the assistant, not merely words such as "agent", "prompt", or "system".
+ * The model remains the second-stage check so quoted discussions of prompt
+ * injection are not blocked automatically.
+ */
+function hasInjectionIndicators(text: string): boolean {
+	const normalized = text.replace(/\s+/g, " ").toLowerCase();
+	const indicators = [
+		/\b(?:ignore|disregard|forget|override)\b.{0,80}\b(?:previous|prior|above|system|developer)\b.{0,40}\b(?:instruction|prompt|message|rule)s?\b/,
+		/\b(?:reveal|show|print|repeat|expose|leak)\b.{0,80}\b(?:system|developer|hidden|internal)\b.{0,40}\b(?:prompt|instruction|message|secret|config|key)s?\b/,
+		/\b(?:you are now|act as|pretend (?:to be|you are)|new persona)\b/,
+		/\b(?:system|assistant|developer)\s*:\s*.{0,120}\b(?:ignore|override|instruction|prompt|tool|execute|reveal)\b/,
+		/\b(?:call|invoke|run|execute|use)\b.{0,50}\b(?:hidden|internal|unauthorized)\b.{0,30}\b(?:tool|function|command|code)\b/,
+	];
+
+	return indicators.some((pattern) => pattern.test(normalized));
+}
+
 export async function isPromptInjection(ai: Ai, bodyHtml: string | null | undefined): Promise<boolean> {
 	if (!bodyHtml) return false;
 
 	const plainText = stripHtmlToText(bodyHtml).trim();
 	if (plainText.length < 10) return false;
+	if (!hasInjectionIndicators(plainText)) return false;
 
 	try {
 		const response = (await ai.run(
@@ -207,8 +231,8 @@ export async function verifyDraft(ai: Ai, body: string): Promise<string> {
 			? `${cleanedTrimmed}\n\n${quotedBlock}`
 			: cleanedTrimmed;
 	} catch (e) {
-				console.error("AI failed — returns empty body, callers may save blank draft:", (e as Error).message);
-		return "";
+		console.error("Draft verifier failed, preserving original draft:", (e as Error).message);
+		return body;
 	}
 }
 
