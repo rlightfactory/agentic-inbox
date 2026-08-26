@@ -37,6 +37,10 @@ import type { Env } from "../types";
 // supports the multi-turn function calling this email agent needs.
 const AGENT_MODEL = "@cf/zai-org/glm-4.7-flash";
 
+const MANUAL_CHAT_RULES = `## Runtime interaction rules
+Messages beginning with "[Auto-triggered]" or "A new email just arrived." are automatic events. For those events, create a draft with draft_reply and do not add chat commentary.
+All other user messages are manual operator requests. For manual requests, answer directly in chat. You may read, search, translate, summarize, and explain emails with the available tools. Do not return an empty response, and do not create a draft unless the operator asks for one.`;
+
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
 function defineTool(def: {
@@ -103,7 +107,9 @@ async function getSystemPrompt(env: Env, mailboxId: string): Promise<string> {
 		if (obj) {
 			const settings = await obj.json<Record<string, unknown>>();
 			if (typeof settings.agentSystemPrompt === "string" && settings.agentSystemPrompt.trim()) {
-				return settings.agentSystemPrompt;
+				// Mailbox customization must not replace the runtime contract that
+				// distinguishes manual questions from automatic draft events.
+				return `${settings.agentSystemPrompt.trim()}\n\n${MANUAL_CHAT_RULES}`;
 			}
 		}
 	} catch {
@@ -284,11 +290,24 @@ export class EmailAgent extends AIChatAgent<any> {
 		const workersai = createWorkersAI({ binding: env.AI });
 		const tools = createEmailTools(env, mailboxId);
 		const systemPrompt = await getSystemPrompt(env, mailboxId);
+		const recentMessages = this.messages
+			.filter((message) => {
+				const text = message.parts
+					.filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
+					.map((part) => part.text)
+					.join("\n")
+					.trim();
+				if (!text && message.role === "assistant") return false;
+				if (text.startsWith("[Auto-triggered]")) return false;
+				if (text.includes("Blocked auto-draft creation:")) return false;
+				return true;
+			})
+			.slice(-12);
 
 		const result = streamText({
 			model: workersai(AGENT_MODEL),
-			system: systemPrompt,
-			messages: await convertToModelMessages(this.messages),
+			system: `${systemPrompt}\n\n${MANUAL_CHAT_RULES}`,
+			messages: await convertToModelMessages(recentMessages),
 			tools,
 			stopWhen: stepCountIs(5),
 			onError: ({ error }) => {
