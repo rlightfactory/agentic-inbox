@@ -286,6 +286,9 @@ export class EmailAgent extends AIChatAgent<any> {
 			messages: await convertToModelMessages(this.messages),
 			tools,
 			stopWhen: stepCountIs(5),
+			onError: ({ error }) => {
+				console.error("Agent chat model stream failed:", error);
+			},
 			onFinish,
 		});
 
