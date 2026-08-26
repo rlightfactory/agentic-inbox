@@ -41,6 +41,27 @@ const MANUAL_CHAT_RULES = `## Runtime interaction rules
 Messages beginning with "[Auto-triggered]" or "A new email just arrived." are automatic events. For those events, create a draft with draft_reply and do not add chat commentary.
 All other user messages are manual operator requests. For manual requests, answer directly in chat. You may read, search, translate, summarize, and explain emails with the available tools. Do not return an empty response, and do not create a draft unless the operator asks for one.`;
 
+function serializeError(error: unknown): Record<string, unknown> {
+	if (!(error instanceof Error)) return { value: String(error) };
+
+	const details: Record<string, unknown> = {
+		name: error.name,
+		message: error.message,
+		stack: error.stack,
+	};
+	for (const key of Object.getOwnPropertyNames(error)) {
+		if (key in details) continue;
+		const value = (error as unknown as Record<string, unknown>)[key];
+		details[key] = value instanceof Error ? serializeError(value) : value;
+	}
+	if (error.cause !== undefined) {
+		details.cause = error.cause instanceof Error
+			? serializeError(error.cause)
+			: error.cause;
+	}
+	return details;
+}
+
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
 function defineTool(def: {
@@ -293,8 +314,7 @@ export class EmailAgent extends AIChatAgent<any> {
 		const recentMessages = this.messages
 			.filter((message) => {
 				const text = message.parts
-					.filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
-					.map((part) => part.text)
+					.map((part) => part.type === "text" ? part.text : "")
 					.join("\n")
 					.trim();
 				if (!text && message.role === "assistant") return false;
@@ -311,7 +331,10 @@ export class EmailAgent extends AIChatAgent<any> {
 			tools,
 			stopWhen: stepCountIs(5),
 			onError: ({ error }) => {
-				console.error("Agent chat model stream failed:", error);
+				console.error("Agent chat model stream failed", JSON.stringify({
+					model: AGENT_MODEL,
+					error: serializeError(error),
+				}));
 			},
 			onFinish,
 		});
