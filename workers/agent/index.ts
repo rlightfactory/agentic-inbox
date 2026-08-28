@@ -62,6 +62,45 @@ function serializeError(error: unknown): Record<string, unknown> {
 	return details;
 }
 
+function getNoReplyReason(email: EmailFull, bodyText: string): string | null {
+	const sender = email.sender.toLowerCase();
+	const localPart = sender.split("@")[0] || "";
+	if (/^(?:no[._-]?reply|do[._-]?not[._-]?reply|donotreply|notifications?|mailer-daemon|postmaster)(?:[+._-]|$)/i.test(localPart)) {
+		return "automated sender address";
+	}
+
+	let headerMap: Record<string, string> = {};
+	try {
+		const parsed = JSON.parse(email.raw_headers || "[]") as Array<{ key?: string; value?: string }>;
+		headerMap = Object.fromEntries(parsed.map((header) => [
+			(header.key || "").toLowerCase(),
+			header.value || "",
+		]));
+	} catch {
+		// Malformed raw headers should not prevent normal email processing.
+	}
+	const autoSubmitted = headerMap["auto-submitted"]?.toLowerCase();
+	if (autoSubmitted && autoSubmitted !== "no") {
+		return "Auto-Submitted header";
+	}
+	if (/^(?:bulk|list|junk)\b/i.test(headerMap.precedence || "")) {
+		return "bulk/list precedence header";
+	}
+	if (headerMap["list-unsubscribe"] || headerMap["list-id"] || headerMap["x-auto-response-suppress"]) {
+		return "mailing-list or auto-response header";
+	}
+
+	const subject = email.subject.toLowerCase();
+	const automatedSubject = /\b(?:subscription (?:created|renewed)|payment receipt|order confirmation|delivery status notification|automatic reply|out of office)\b/i.test(subject);
+	const hasUnsubscribe = /\bunsubscribe\b|manage (?:your )?preferences/i.test(bodyText);
+	if (automatedSubject && hasUnsubscribe) return "automated notification content";
+	if (hasUnsubscribe && /\b(?:newsletter|digest|promotion|offer)\b/i.test(subject)) {
+		return "marketing email";
+	}
+
+	return null;
+}
+
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
 function defineTool(def: {
@@ -396,6 +435,18 @@ export class EmailAgent extends AIChatAgent<any> {
 		let threadContext = "";
 		try {
 			const email = (await stub.getEmail(emailData.emailId)) as EmailFull | null;
+			const plainBody = email?.body ? stripHtmlToText(email.body) : "";
+			if (email) {
+				const noReplyReason = getNoReplyReason(email, plainBody);
+				if (noReplyReason) {
+					console.info("Skipping auto-draft for no-reply email", JSON.stringify({
+						emailId: emailData.emailId,
+						sender: emailData.sender,
+						reason: noReplyReason,
+					}));
+					return { status: "skipped", reason: noReplyReason };
+				}
+			}
 			if (email?.body) {
 				const isInjection = await isPromptInjection(env.AI, email.body);
 				if (isInjection) {
@@ -423,7 +474,7 @@ export class EmailAgent extends AIChatAgent<any> {
 					return;
 				}
 				
-				emailBody = stripHtmlToText(email.body);
+				emailBody = plainBody;
 			}
 
 		// Load thread for conversation context
