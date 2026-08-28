@@ -293,6 +293,11 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 				in_reply_to: composeOptions.originalEmail?.id || composeOptions.draftEmail?.in_reply_to || undefined,
 				thread_id: composeOptions.originalEmail?.thread_id || composeOptions.draftEmail?.thread_id || undefined,
 				draft_id: composeOptions.draftEmail?.id || undefined,
+				...(attachments.length > 0
+					? { attachments: attachments.map(({ content, filename, type, disposition }) => ({
+						content, filename, type, disposition,
+					})) }
+					: {}),
 			} });
 			toastManager.add({ title: "Draft saved!" });
 		}

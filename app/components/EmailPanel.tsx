@@ -29,6 +29,19 @@ function EmailPanelSkeleton() {
 	);
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => {
+			const value = reader.result;
+			if (typeof value !== "string") return reject(new Error("Failed to read draft attachment"));
+			resolve(value.slice(value.indexOf(",") + 1));
+		};
+		reader.onerror = () => reject(reader.error ?? new Error("Failed to read draft attachment"));
+		reader.readAsDataURL(blob);
+	});
+}
+
 export default function EmailPanel({ emailId }: { emailId: string }) {
 	const { mailboxId, folder } = useParams<{ mailboxId: string; folder: string }>();
 	const { data: email } = useEmail(mailboxId, emailId) as { data?: Email };
@@ -111,13 +124,19 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 		if (!mailboxId || !currentMailbox) return;
 		setIsSending(true);
 		try {
-			if (!target.recipient || !target.subject) { try { const fresh = await api.getEmail(mailboxId, target.id) as Email; if (fresh) target = fresh; } catch {} }
+			if (!target.recipient || !target.subject || target.attachments === undefined) { try { const fresh = await api.getEmail(mailboxId, target.id) as Email; if (fresh) target = fresh; } catch {} }
 			if (!target.recipient) { toastManager.add({ title: "Cannot send: no recipient set on this draft.", variant: "error" }); return; }
 			const toRecipients = splitEmailList(target.recipient);
 			if (toRecipients.length === 0) { toastManager.add({ title: "Cannot send: no valid recipient set on this draft.", variant: "error" }); return; }
 			const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
 			const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
 			const originalEmail = target.in_reply_to ? allMessages.find((msg) => msg.id === target.in_reply_to) : undefined;
+			const storedAttachments = await Promise.all((target.attachments || []).map(async (attachment) => ({
+				content: await blobToBase64(await api.getAttachment(mailboxId, target.id, attachment.id)),
+				filename: attachment.filename,
+				type: attachment.mimetype || "application/octet-stream",
+				disposition: (attachment.disposition === "inline" ? "inline" : "attachment") as "inline" | "attachment",
+			})));
 			const emailData = {
 				to: toEmailListValue(toRecipients),
 				cc: toEmailListValue(splitEmailList(target.cc)),
@@ -126,6 +145,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				subject: target.subject || "(no subject)",
 				html: target.body || "",
 				text: target.body ? target.body.replace(/<[^>]*>/g, "").trim() : "",
+				...(storedAttachments.length > 0 ? { attachments: storedAttachments } : {}),
 			};
 			if (originalEmail) await replyMut.mutateAsync({ mailboxId, emailId: originalEmail.id, email: emailData }); else await sendEmailMut.mutateAsync({ mailboxId, email: emailData });
 			await deleteEmailMut.mutateAsync({ mailboxId, id: target.id });
