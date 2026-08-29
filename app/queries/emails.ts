@@ -246,6 +246,12 @@ export function useSaveDraft() {
 				in_reply_to?: string;
 				thread_id?: string;
 				draft_id?: string;
+				attachments?: Array<{
+					content: string;
+					filename: string;
+					type: string;
+					disposition: "attachment" | "inline";
+				}>;
 			};
 		}) => api.saveDraft(mailboxId, draft),
 		onSuccess: (_data, { mailboxId }) => invalidate(mailboxId),
