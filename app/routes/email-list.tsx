@@ -2,7 +2,13 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Button, Pagination, Tooltip } from "@cloudflare/kumo";
+import {
+	Button,
+	Dialog,
+	Pagination,
+	Tooltip,
+	useKumoToastManager,
+} from "@cloudflare/kumo";
 import {
 	ArchiveIcon,
 	ArrowBendUpLeftIcon,
@@ -153,6 +159,8 @@ export default function EmailListRoute() {
 		startCompose,
 	} = useUIStore();
 	const [page, setPage] = useState(1);
+	const [emailToDelete, setEmailToDelete] = useState<string | null>(null);
+	const toastManager = useKumoToastManager();
 
 	const queryClient = useQueryClient();
 	const updateEmail = useUpdateEmail();
@@ -213,12 +221,26 @@ export default function EmailListRoute() {
 	const handleDelete = (e: React.MouseEvent, emailId: string) => {
 		e.preventDefault();
 		e.stopPropagation();
-		if (mailboxId) {
-			const confirmed = window.confirm("Are you sure you want to delete this email?");
-			if (!confirmed) return;
-			deleteEmail.mutate({ mailboxId, id: emailId });
-			if (selectedEmailId === emailId) closePanel();
+		setEmailToDelete(emailId);
+	};
+
+	const confirmDelete = () => {
+		if (mailboxId && emailToDelete) {
+			const id = emailToDelete;
+			deleteEmail.mutate(
+				{ mailboxId, id },
+				{
+					onSuccess: () => toastManager.add({ title: "Email deleted" }),
+					onError: () =>
+						toastManager.add({
+							title: "Failed to delete email",
+							variant: "error",
+						}),
+				},
+			);
+			if (selectedEmailId === id) closePanel();
 		}
+		setEmailToDelete(null);
 	};
 
 	const handleRefresh = () => {
@@ -402,8 +424,8 @@ export default function EmailListRoute() {
 										</div>
 									</div>
 
-										{/* Hover actions */}
-										<div className="hidden group-hover:flex items-center shrink-0">
+										{/* Row actions -- always visible on touch, hover-only on desktop */}
+										<div className="flex md:hidden md:group-hover:flex items-center shrink-0">
 											<Tooltip content={email.read ? "Mark unread" : "Mark read"} asChild>
 												<Button
 													variant="ghost"
@@ -456,6 +478,40 @@ export default function EmailListRoute() {
 						/>
 					</div>
 				)}
+
+				{/* Delete confirmation */}
+				<Dialog.Root
+					open={emailToDelete !== null}
+					onOpenChange={(open) => {
+						if (!open) setEmailToDelete(null);
+					}}
+				>
+					<Dialog size="sm" className="p-6">
+						<Dialog.Title className="text-base font-semibold mb-2">
+							Delete email
+						</Dialog.Title>
+						<Dialog.Description className="text-kumo-subtle text-sm mb-5">
+							Are you sure you want to delete this email? This action cannot be
+							undone.
+						</Dialog.Description>
+						<div className="flex justify-end gap-2">
+							<Dialog.Close
+								render={(props) => (
+									<Button {...props} variant="secondary" size="sm">
+										Cancel
+									</Button>
+								)}
+							/>
+							<Button
+								variant="destructive"
+								size="sm"
+								onClick={confirmDelete}
+							>
+								Delete
+							</Button>
+						</div>
+					</Dialog>
+				</Dialog.Root>
 		</MailboxSplitView>
 	);
 }
