@@ -54,6 +54,7 @@ export default function SingleMessageView({
 				mailboxId={mailboxId}
 				emailId={email.id}
 				attachments={email.attachments}
+				body={email.body || ""}
 				onPreviewImage={onPreviewImage}
 				className="px-4 py-3 border-t border-kumo-line shrink-0 md:px-6"
 				showHeading
