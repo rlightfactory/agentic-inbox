@@ -211,6 +211,7 @@ export default function ThreadMessage({
 					mailboxId={mailboxId}
 					emailId={email.id}
 					attachments={email.attachments}
+					body={email.body || ""}
 					onPreviewImage={onPreviewImage}
 					className="mt-3 md:ml-[42px]"
 				/>

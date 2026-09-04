@@ -174,6 +174,12 @@ export function buildQuotedReplyBlock(
 /**
  * Rewrite CID references in email HTML to API URLs for inline images.
  * Replaces `src="cid:image001@example.com"` with the attachment API endpoint.
+ *
+ * A `cid:` reference is rewritten whenever an attachment carries a matching
+ * Content-ID, regardless of its Content-Disposition. Many clients (Apple Mail,
+ * iOS Mail) embed images via `cid:` while sending them with a `attachment`
+ * disposition or none at all, so gating on `disposition === "inline"` would
+ * leave those images broken.
  */
 export function rewriteInlineImages(
 	body: string,
@@ -184,7 +190,7 @@ export function rewriteInlineImages(
 	if (!body || !attachments?.length) return body;
 	let result = body;
 	for (const att of attachments) {
-		if (att.disposition === "inline" && att.content_id) {
+		if (att.content_id) {
 			const url = `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${att.id}`;
 			// Strip angle brackets from content_id if present
 			const cid = att.content_id.startsWith("<")
@@ -196,8 +202,27 @@ export function rewriteInlineImages(
 	return result;
 }
 
-export function getNonInlineAttachments(attachments?: Attachment[]): Attachment[] {
-	return attachments?.filter((attachment) => attachment.disposition !== "inline") ?? [];
+export function getNonInlineAttachments(
+	attachments?: Attachment[],
+	body?: string,
+): Attachment[] {
+	if (!attachments?.length) return [];
+	return attachments.filter((attachment) => {
+		if (attachment.disposition === "inline") return false;
+		// Hide images embedded in the body via cid: -- they already render
+		// inline, so listing them again as downloads is redundant.
+		if (attachment.content_id && body) {
+			const cid = attachment.content_id.startsWith("<")
+				? attachment.content_id.slice(1, -1)
+				: attachment.content_id;
+			const referenced = new RegExp(
+				`cid:${cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+				"i",
+			).test(body);
+			if (referenced) return false;
+		}
+		return true;
+	});
 }
 
 export function getAttachmentUrl(

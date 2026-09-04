@@ -10,6 +10,8 @@ interface EmailAttachmentListProps {
 	mailboxId?: string;
 	emailId: string;
 	attachments?: Attachment[];
+	/** Email HTML body, used to hide attachments already embedded inline via cid: */
+	body?: string;
 	onPreviewImage?: (url: string, filename: string) => void;
 	className?: string;
 	showHeading?: boolean;
@@ -19,13 +21,14 @@ export default function EmailAttachmentList({
 	mailboxId,
 	emailId,
 	attachments,
+	body,
 	onPreviewImage,
 	className,
 	showHeading = false,
 }: EmailAttachmentListProps) {
 	if (!mailboxId) return null;
 
-	const files = getNonInlineAttachments(attachments);
+	const files = getNonInlineAttachments(attachments, body);
 	if (files.length === 0) return null;
 
 	return (
