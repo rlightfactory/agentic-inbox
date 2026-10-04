@@ -56,8 +56,16 @@ export interface ComposeAttachment {
 	disposition: "attachment";
 }
 
-// Brevo caps total attachment payload; keep a conservative per-message limit.
+// Brevo caps the total transactional email (including its base64-encoded
+// attachments) at ~10 MB. Base64 inflates binary data by ~33%, so the guard
+// must measure the ENCODED payload that actually goes over the wire — not the
+// raw file size — otherwise files can pass here yet still be rejected by Brevo.
 const MAX_ATTACHMENTS_BYTES = 10 * 1024 * 1024;
+
+/** Encoded byte size of a base64 string (its ASCII length is its byte count). */
+function base64ByteSize(base64: string): number {
+	return base64.length;
+}
 
 /** Read a File into a base64 string (without the `data:...;base64,` prefix). */
 function readFileAsBase64(file: File): Promise<string> {
@@ -261,7 +269,7 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			);
 			setAttachments((prev) => {
 				const next = [...prev, ...encoded];
-				const total = next.reduce((sum, a) => sum + a.size, 0);
+				const total = next.reduce((sum, a) => sum + base64ByteSize(a.content), 0);
 				if (total > MAX_ATTACHMENTS_BYTES) {
 					const message = "Attachments exceed the 10 MB total limit.";
 					setError(message);
