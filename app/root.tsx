@@ -44,6 +44,9 @@ function makeQueryClient() {
 			onError: (error) => {
 				// Global fallback for mutations that don't handle errors themselves.
 				// Consumers using mutateAsync + try/catch handle their own errors.
+				// Aborted requests are expected during cancellation/navigation and are
+				// not actionable mutation failures. Timeouts use TimeoutError instead.
+				if (error instanceof Error && error.name === "AbortError") return;
 				console.error("Mutation failed:", error);
 			},
 		}),

@@ -44,7 +44,7 @@ export default function RichTextEditor({
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const editor = useEditor({
 		extensions: [
-			StarterKit,
+			StarterKit.configure({ link: false, underline: false }),
 			Underline,
 			TextAlign.configure({ types: ["heading", "paragraph"] }),
 			LinkExtension.configure({ openOnClick: false }),

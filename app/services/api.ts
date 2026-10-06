@@ -23,7 +23,15 @@ async function request<T>(
 	options: RequestInit = {},
 ): Promise<T> {
 	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	const method = options.method ?? "GET";
+	const endpoint = url.split("?")[0];
+	const timeout = setTimeout(
+		() => controller.abort(new DOMException(
+			`${method} ${endpoint} timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds`,
+			"TimeoutError",
+		)),
+		REQUEST_TIMEOUT_MS,
+	);
 
 	// Combine caller signal (e.g. TanStack Query abort) with our timeout signal
 	const signal = options.signal
