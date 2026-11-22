@@ -100,40 +100,54 @@ html {
 	color-scheme: light;
 }
 body {
-	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-	font-size: 14px;
-	line-height: 1.6;
-	color: #1a1a1a;
+	font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	font-size: 14.5px;
+	line-height: 1.65;
+	color: #1e293b;
 	background: #ffffff;
 	padding: ${padding};
 	margin: 0;
 	word-wrap: break-word;
 	overflow-wrap: break-word;
+	-webkit-font-smoothing: antialiased;
 	${autoSize ? "overflow: hidden;" : ""}
 }
 [style*="position: fixed"], [style*="position:fixed"], [style*="position: absolute"], [style*="position:absolute"] {
 	position: relative !important;
 }
-a { color: #2563eb; }
+a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
 img { max-width: 100%; height: auto; }
 blockquote {
-	border-left: 3px solid #d1d5db;
-	padding-left: 1em;
-	margin-left: 0;
-	color: #6b7280;
+	border-left: 3px solid #cbd5e1;
+	padding-left: 14px;
+	margin: 12px 0;
+	color: #64748b;
 }
 pre {
-	background: #f3f4f6;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
 	padding: 12px;
-	border-radius: 6px;
+	border-radius: 8px;
 	overflow-x: auto;
 	font-size: 13px;
+	font-family: "JetBrains Mono", monospace;
+}
+code {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 12.5px;
+	background: #f1f5f9;
+	padding: 2px 5px;
+	border-radius: 4px;
 }
 table { border-collapse: collapse; max-width: 100%; }
 td, th { padding: 4px 8px; }
-p { margin: 4px 0; }
-h1, h2, h3 { margin: 8px 0 4px; }
-ul, ol { padding-left: 20px; margin: 4px 0; }
+p { margin: 0 0 12px 0; }
+p:last-child { margin-bottom: 0; }
+h1, h2, h3, h4 { margin: 16px 0 8px; font-weight: 600; color: #0f172a; }
+ul, ol { padding-left: 20px; margin: 6px 0 12px; }
+li { margin: 3px 0; }
+pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; }
 </style>
 </head>
 <body>${cleanBody}${heightScript}</body>
