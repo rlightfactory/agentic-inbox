@@ -74,7 +74,7 @@ export default function ThreadMessage({
 	onPreviewImage,
 }: ThreadMessageProps) {
 	const isSelf = email.sender === mailboxEmail;
-	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : isSelf ? "bg-kumo-brand/[0.04]" : ""}`;
+	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning" : isSelf ? "border-l-2 border-l-kumo-brand/40" : ""}`;
 	// Our own messages get a "You" pill so the back-and-forth reads at a glance.
 	const senderLabelClass =
 		isSelf && !isDraft
