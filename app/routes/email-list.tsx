@@ -27,7 +27,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
+import ContactAvatar from "~/components/ContactAvatar";
 import MailboxSplitView from "~/components/MailboxSplitView";
+import { getRowPeople } from "~/lib/contacts";
 import { getSnippetText } from "~/lib/utils";
 import {
 	useDeleteEmail,
@@ -36,6 +38,7 @@ import {
 	useUpdateEmail,
 } from "~/queries/emails";
 import { useFolders } from "~/queries/folders";
+import { useMailbox } from "~/queries/mailboxes";
 import { queryKeys } from "~/queries/keys";
 import { useUIStore } from "~/hooks/useUIStore";
 import type { Email } from "~/types";
@@ -185,6 +188,8 @@ export default function EmailListRoute() {
 	const totalCount = emailData?.totalCount ?? 0;
 
 	const { data: folders = [] } = useFolders(mailboxId);
+	const { data: mailbox } = useMailbox(mailboxId);
+	const isOutgoingFolder = folder === Folders.SENT || folder === Folders.DRAFT;
 
 	const folderName = useMemo(() => {
 		const found = folders.find((f) => f.id === folder);
@@ -278,17 +283,9 @@ export default function EmailListRoute() {
 		}
 	};
 
-	const formatParticipants = (email: Email): string => {
-		if (email.participants) {
-			const names = email.participants
-				.split(",")
-				.map((p) => p.trim().split("@")[0])
-				.filter((name, idx, arr) => arr.indexOf(name) === idx);
-			if (names.length <= 3) return names.join(", ");
-			return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-		}
-		return email.sender.split("@")[0];
-	};
+	/** Who this row is about: other people (or recipients in Sent/Drafts). */
+	const getRow = (email: Email) =>
+		getRowPeople(email, mailbox?.email, isOutgoingFolder);
 
 	return (
 		<MailboxSplitView
@@ -381,14 +378,27 @@ export default function EmailListRoute() {
 											/>
 										</button>
 
+										{/* Avatar of the latest sender */}
+										<ContactAvatar
+											label={getRow(email).primary.label}
+											email={getRow(email).primary.email}
+											size={36}
+										/>
+
 										{/* Content */}
 										<div className="min-w-0 flex-1">
 											<div className="flex items-center gap-2">
 												<span
-													className={`truncate text-sm ${hasUnread(email) ? "font-semibold text-kumo-default" : "text-kumo-strong"}`}
+													title={getRow(email).title}
+													className={`truncate text-sm shrink-0 max-w-[70%] ${hasUnread(email) ? "font-semibold text-kumo-default" : "text-kumo-strong"}`}
 												>
-													{formatParticipants(email)}
+													{getRow(email).label}
 												</span>
+												{getRow(email).people.length === 1 && getRow(email).people[0].domain && (
+													<span className="hidden sm:inline min-w-0 truncate text-xs text-kumo-subtle">
+														{getRow(email).people[0].domain}
+													</span>
+												)}
 												{(email.thread_count ?? 1) > 1 && (
 													<span className="shrink-0 text-xs text-kumo-subtle bg-kumo-fill rounded-full px-1.5 py-0.5 font-medium">
 														{email.thread_count}

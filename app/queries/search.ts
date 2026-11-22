@@ -32,6 +32,7 @@ export function useSearchEmails(
 			};
 			if (parsed.query) params.query = parsed.query;
 			if (parsed.from) params.from = parsed.from;
+			if (parsed.contact) params.contact = parsed.contact;
 			if (parsed.to) params.to = parsed.to;
 			if (parsed.subject) params.subject = parsed.subject;
 			if (parsed.folder) params.folder = parsed.folder;

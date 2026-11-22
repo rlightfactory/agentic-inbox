@@ -114,6 +114,24 @@ export async function toolSearchEmails(
 	});
 }
 
+// ── get_contact_history ────────────────────────────────────────────
+
+/**
+ * Everything known about one customer/contact: all addresses merged into
+ * the contact, message stats and every conversation they took part in.
+ * Lets the agent answer with full history instead of a single thread.
+ */
+export async function toolGetContactHistory(
+	env: Env,
+	mailboxId: string,
+	params: { email: string },
+) {
+	const stub = getMailboxStub(env, mailboxId);
+	return (stub as unknown as {
+		getContact: (email: string) => Promise<unknown>;
+	}).getContact(params.email);
+}
+
 // ── draft_reply ────────────────────────────────────────────────────
 
 /**

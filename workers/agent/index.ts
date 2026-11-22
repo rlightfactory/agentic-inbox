@@ -23,6 +23,7 @@ import {
 	toolGetEmail,
 	toolGetThread,
 	toolSearchEmails,
+	toolGetContactHistory,
 	toolDraftReply,
 	toolDraftEmail,
 	toolMarkEmailRead,
@@ -244,6 +245,17 @@ function createEmailTools(env: Env, mailboxId: string) {
 			}),
 			execute: async ({ query, folder }): Promise<unknown> => {
 				return toolSearchEmails(env, mailboxId, { query, folder });
+			},
+		}),
+
+		get_contact_history: defineTool({
+			description:
+				"Get the full history of one customer/contact: every address merged into the same contact, their display name, message statistics and ALL conversations with them (not just one thread). Use this before replying to a returning customer.",
+			parameters: z.object({
+				email: z.string().describe("Any email address of the contact"),
+			}),
+			execute: async ({ email }): Promise<unknown> => {
+				return toolGetContactHistory(env, mailboxId, { email });
 			},
 		}),
 

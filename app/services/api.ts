@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type { Contact, Email, Folder, Mailbox } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -170,6 +170,14 @@ const api = {
 		put<Folder>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`, { name }),
 	deleteFolder: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`),
+
+	// Contacts
+	getContact: (mailboxId: string, email: string, opts?: { signal?: AbortSignal }) =>
+		get<Contact>(`/api/v1/mailboxes/${mailboxId}/contacts/${encodeURIComponent(email)}`, { signal: opts?.signal }),
+	mergeContact: (mailboxId: string, email: string, into: string) =>
+		post<void>(`/api/v1/mailboxes/${mailboxId}/contacts/merge`, { email, into }),
+	unmergeContact: (mailboxId: string, email: string) =>
+		del<void>(`/api/v1/mailboxes/${mailboxId}/contacts/aliases/${encodeURIComponent(email)}`),
 
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>

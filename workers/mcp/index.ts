@@ -11,6 +11,7 @@ import {
 	toolGetEmail,
 	toolGetThread,
 	toolSearchEmails,
+	toolGetContactHistory,
 	toolDraftReply,
 	toolDraftEmail,
 	toolUpdateDraft,
@@ -178,6 +179,22 @@ export class EmailMCP extends McpAgent<Env> {
 				const denied = await verifyMailbox(mailboxId);
 				if (denied) return denied;
 				const result = await toolSearchEmails(env, mailboxId, { query, folder });
+				return mcpText(result);
+			},
+		);
+
+		// ── get_contact_history ────────────────────────────────────
+		this.server.tool(
+			"get_contact_history",
+			"Get the full history of one customer/contact: merged addresses, display name, message stats and all conversations with them.",
+			{
+				mailboxId: z.string().describe("The mailbox email address"),
+				email: z.string().describe("Any email address of the contact"),
+			},
+			async ({ mailboxId, email }) => {
+				const denied = await verifyMailbox(mailboxId);
+				if (denied) return denied;
+				const result = await toolGetContactHistory(env, mailboxId, { email });
 				return mcpText(result);
 			},
 		);

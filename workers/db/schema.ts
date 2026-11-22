@@ -17,6 +17,7 @@ export const emails = sqliteTable("emails", {
 		.references(() => folders.id, { onDelete: "cascade" }),
 	subject: text("subject"),
 	sender: text("sender"),
+	sender_name: text("sender_name"),
 	recipient: text("recipient"),
 	cc: text("cc"),
 	bcc: text("bcc"),
@@ -29,6 +30,11 @@ export const emails = sqliteTable("emails", {
 	thread_id: text("thread_id"),
 	message_id: text("message_id"),
 	raw_headers: text("raw_headers"),
+});
+
+export const contact_aliases = sqliteTable("contact_aliases", {
+	email: text("email").primaryKey(),
+	canonical: text("canonical").notNull(),
 });
 
 export const attachments = sqliteTable("attachments", {

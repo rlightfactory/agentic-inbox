@@ -29,6 +29,7 @@ export interface Email {
 	folder_id?: string | null;
 	subject: string;
 	sender: string;
+	sender_name?: string | null;
 	recipient: string;
 	cc?: string;
 	bcc?: string;
@@ -63,4 +64,31 @@ export interface Folder {
 	id: string;
 	name: string;
 	unreadCount: number;
+}
+
+export interface ContactConversation {
+	id: string;
+	subject: string;
+	date: string;
+	folder_id: string;
+	snippet?: string | null;
+	message_count: number;
+	unread_count: number;
+}
+
+export interface Contact {
+	/** Canonical address of the contact. */
+	email: string;
+	name: string | null;
+	domain: string;
+	/** All addresses merged into this contact, canonical first. */
+	addresses: string[];
+	stats: {
+		total_messages: number;
+		received_messages: number;
+		first_date: string | null;
+		last_date: string | null;
+		conversation_count: number;
+	};
+	conversations: ContactConversation[];
 }

@@ -6,11 +6,13 @@ import { useKumoToastManager } from "@cloudflare/kumo";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { Folders } from "shared/folders";
+import ContactCard from "~/components/email-panel/ContactCard";
 import EmailPanelDialogs from "~/components/email-panel/EmailPanelDialogs";
 import EmailPanelHeader from "~/components/email-panel/EmailPanelHeader";
 import EmailPanelToolbar from "~/components/email-panel/EmailPanelToolbar";
 import SingleMessageView from "~/components/email-panel/SingleMessageView";
 import ThreadMessage from "~/components/email-panel/ThreadMessage";
+import { parseAddress } from "~/lib/contacts";
 import { splitEmailList, toEmailListValue } from "~/lib/utils";
 import api from "~/services/api";
 import { useDeleteEmail, useEmail, useMoveEmail, useReplyToEmail, useSendEmail, useThreadReplies, useUpdateEmail } from "~/queries/emails";
@@ -159,6 +161,20 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const hasThread = allMessages.length > 1;
 
+	// The contact is whoever we're talking to: the latest sender that isn't
+	// this mailbox, or the first recipient when only our own mail is shown.
+	const mailboxAddress = currentMailbox?.email?.toLowerCase();
+	const contactTarget = (() => {
+		const m = lastReceivedMessage ?? email;
+		if (m.sender && m.sender.toLowerCase() !== mailboxAddress) {
+			return { email: m.sender, name: m.sender_name };
+		}
+		const firstRecipient = splitEmailList(m.recipient)
+			.map((r) => parseAddress(r).email)
+			.find((r) => r && r !== mailboxAddress);
+		return firstRecipient ? { email: firstRecipient, name: null } : null;
+	})();
+
 	return (
 		<div className="flex flex-col h-full">
 			<EmailPanelToolbar
@@ -200,6 +216,15 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				messageCount={allMessages.length}
 				showThreadCount={hasThread}
 			/>
+
+			{contactTarget && (
+				<ContactCard
+					key={contactTarget.email}
+					mailboxId={mailboxId}
+					senderEmail={contactTarget.email}
+					senderName={contactTarget.name}
+				/>
+			)}
 
 			<div className="flex-1 overflow-y-auto">
 				{hasThread ? (

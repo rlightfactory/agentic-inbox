@@ -23,6 +23,16 @@ const NORMALIZED_SUBJECT_SQL = `LOWER(TRIM(
 		're: ', ''), 'fwd: ', ''), 'fw: ', '')
 ))`;
 
+/**
+ * Aggregate distinct thread participants as "Name <address>" (or a bare
+ * address when no display name is known). Commas and angle brackets are
+ * stripped from names so the result stays safely comma-splittable.
+ */
+const PARTICIPANTS_SQL = `GROUP_CONCAT(DISTINCT CASE
+	WHEN sender_name IS NOT NULL AND sender_name != ''
+	THEN REPLACE(REPLACE(REPLACE(sender_name, ',', ' '), '<', ' '), '>', ' ') || ' <' || sender || '>'
+	ELSE sender END)`;
+
 const ALLOWED_SORT_COLUMNS = [
 	"id",
 	"subject",
@@ -53,6 +63,7 @@ interface SearchFilterOptions {
 	query: string;
 	folder?: string;
 	from?: string;
+	contact?: string;
 	to?: string;
 	subject?: string;
 	date_start?: string;
@@ -75,6 +86,7 @@ interface EmailData {
 	id: string;
 	subject: string;
 	sender: string;
+	sender_name?: string | null;
 	recipient: string;
 	cc?: string | null;
 	bcc?: string | null;
@@ -107,6 +119,43 @@ export class MailboxDO extends DurableObject<Env> {
 		super(state, env);
 		this.db = drizzle(this.ctx.storage, { schema });
 		applyMigrations(this.ctx.storage.sql, mailboxMigrations, this.ctx.storage);
+		this.#backfillSenderNames();
+	}
+
+	/**
+	 * One-time best-effort backfill of sender display names from the stored
+	 * raw headers, so mail received before sender_name existed also shows
+	 * names. Failures are non-fatal: the UI falls back to the address.
+	 */
+	#backfillSenderNames() {
+		const KEY = "sender_names_backfilled";
+		try {
+			if (this.ctx.storage.kv.get(KEY)) return;
+			const rows = [
+				...this.ctx.storage.sql.exec(
+					"SELECT id, raw_headers FROM emails WHERE sender_name IS NULL AND raw_headers IS NOT NULL",
+				),
+			] as { id: string; raw_headers: string }[];
+			for (const row of rows) {
+				try {
+					const headers = JSON.parse(row.raw_headers);
+					if (!Array.isArray(headers)) continue;
+					const from = headers.find(
+						(h: any) => typeof h?.key === "string" && h.key.toLowerCase() === "from",
+					);
+					const m = typeof from?.value === "string" ? from.value.match(/^\s*"?([^"<]+?)"?\s*</) : null;
+					const name = m?.[1]?.trim();
+					if (name) {
+						this.ctx.storage.sql.exec("UPDATE emails SET sender_name = ?1 WHERE id = ?2", name, row.id);
+					}
+				} catch {
+					// ignore malformed header blobs
+				}
+			}
+			this.ctx.storage.kv.put(KEY, true);
+		} catch (err) {
+			console.error("sender name backfill failed", err);
+		}
 	}
 
 	// ── Email CRUD (Drizzle) ───────────────────────────────────────
@@ -150,6 +199,7 @@ export class MailboxDO extends DurableObject<Env> {
 				id: schema.emails.id,
 				subject: schema.emails.subject,
 				sender: schema.emails.sender,
+				sender_name: schema.emails.sender_name,
 				recipient: schema.emails.recipient,
 				cc: schema.emails.cc,
 				bcc: schema.emails.bcc,
@@ -250,7 +300,7 @@ export class MailboxDO extends DurableObject<Env> {
 						draft_group_key,
 						COUNT(*) as thread_count,
 						SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END) as thread_unread_count,
-						GROUP_CONCAT(DISTINCT sender) as participants
+						${PARTICIPANTS_SQL} as participants
 					FROM folder_emails
 					GROUP BY draft_group_key
 				),
@@ -264,7 +314,7 @@ export class MailboxDO extends DurableObject<Env> {
 					FROM folder_emails fe
 				)
 				SELECT
-					lp.id, lp.subject, lp.sender, lp.recipient, lp.date,
+					lp.id, lp.subject, lp.sender, lp.sender_name, lp.recipient, lp.date,
 					lp.read, lp.starred, lp.thread_id, lp.folder_id,
 					lp.in_reply_to, lp.email_references,
 					SUBSTR(lp.body, 1, 300) as snippet,
@@ -323,7 +373,7 @@ export class MailboxDO extends DurableObject<Env> {
 					COUNT(*) as thread_count,
 					SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END) as thread_unread_count,
 					SUM(CASE WHEN read = 1 THEN 1 ELSE 0 END) as thread_read_count,
-					GROUP_CONCAT(DISTINCT sender) as participants,
+					${PARTICIPANTS_SQL} as participants,
 					SUM(CASE WHEN folder_id = (SELECT id FROM folders WHERE name = 'draft' LIMIT 1) THEN 1 ELSE 0 END) as has_draft
 				FROM all_emails_with_conversation
 				WHERE conversation_id IN (
@@ -352,7 +402,7 @@ export class MailboxDO extends DurableObject<Env> {
 					ON fe.raw_thread_id = tc.raw_thread_id
 			)
 			SELECT
-				lif.id, lif.subject, lif.sender, lif.recipient, lif.date,
+				lif.id, lif.subject, lif.sender, lif.sender_name, lif.recipient, lif.date,
 				lif.read, lif.starred, lif.thread_id, lif.folder_id,
 				lif.in_reply_to, lif.email_references,
 				SUBSTR(lif.body, 1, 300) as snippet,
@@ -659,7 +709,7 @@ export class MailboxDO extends DurableObject<Env> {
 		options: SearchFilterOptions,
 		tableAlias = "",
 	): { conditions: string[]; params: (string | number)[] } {
-		const { query, folder, from, to, subject, date_start, date_end, is_read, is_starred, has_attachment } = options;
+		const { query, folder, from, contact, to, subject, date_start, date_end, is_read, is_starred, has_attachment } = options;
 		const prefix = tableAlias ? `${tableAlias}.` : "";
 		const conditions: string[] = [];
 		const params: (string | number)[] = [];
@@ -683,6 +733,18 @@ export class MailboxDO extends DurableObject<Env> {
 			conditions.push(`${prefix}folder_id = (SELECT id FROM folders WHERE name = ${p} OR id = ${p} LIMIT 1)`);
 		}
 		if (from) { const p = addParam(`%${from}%`); conditions.push(`${prefix}sender LIKE ${p}`); }
+		if (contact) {
+			// Match a contact by address or name, expanded to every address
+			// merged into the same contact (see contact_aliases).
+			const p = addParam(`%${contact}%`);
+			const group = `SELECT canonical FROM contact_aliases WHERE email LIKE ${p} OR canonical LIKE ${p}`;
+			const members = `SELECT email FROM contact_aliases WHERE canonical IN (${group}) UNION SELECT canonical FROM contact_aliases WHERE canonical IN (${group})`;
+			conditions.push(
+				`(${prefix}sender LIKE ${p} OR ${prefix}sender_name LIKE ${p} OR ${prefix}recipient LIKE ${p} OR ${prefix}cc LIKE ${p}` +
+				` OR ${prefix}sender IN (${members})` +
+				` OR EXISTS (SELECT 1 FROM (${members}) mm WHERE ${prefix}recipient LIKE '%' || mm.email || '%'))`,
+			);
+		}
 		if (to) { const p = addParam(`%${to}%`); conditions.push(`(${prefix}recipient LIKE ${p} OR ${prefix}cc LIKE ${p} OR ${prefix}bcc LIKE ${p})`); }
 		if (subject) { const p = addParam(`%${subject}%`); conditions.push(`${prefix}subject LIKE ${p}`); }
 		if (date_start) { const p = addParam(date_start); conditions.push(`${prefix}date >= ${p}`); }
@@ -703,7 +765,7 @@ export class MailboxDO extends DurableObject<Env> {
 		const offset = (page - 1) * limit;
 
 		const query = `
-			SELECT e.id, e.subject, e.sender, e.recipient, e.cc, e.bcc, e.date,
+			SELECT e.id, e.subject, e.sender, e.sender_name, e.recipient, e.cc, e.bcc, e.date,
 				e.read, e.starred, e.in_reply_to, e.email_references,
 				e.thread_id, e.folder_id,
 				SUBSTR(e.body, 1, 300) as snippet,
@@ -735,6 +797,136 @@ export class MailboxDO extends DurableObject<Env> {
 			| { total: number }
 			| undefined;
 		return row?.total ?? 0;
+	}
+
+	// ── Contacts ───────────────────────────────────────────────────
+
+	/** Canonical address for an email address (itself unless merged). */
+	#canonicalOf(address: string): string {
+		const row = [
+			...this.ctx.storage.sql.exec(
+				"SELECT canonical FROM contact_aliases WHERE email = ?1",
+				address,
+			),
+		][0] as { canonical: string } | undefined;
+		return row?.canonical ?? address;
+	}
+
+	/** Every address belonging to the same contact, canonical first. */
+	#contactAddresses(address: string): string[] {
+		const canonical = this.#canonicalOf(address);
+		const aliases = [
+			...this.ctx.storage.sql.exec(
+				"SELECT email FROM contact_aliases WHERE canonical = ?1 ORDER BY email",
+				canonical,
+			),
+		] as { email: string }[];
+		return [canonical, ...aliases.map((a) => a.email)];
+	}
+
+	/**
+	 * Aggregate view of one contact: all merged addresses, display name,
+	 * message statistics and every conversation they take part in.
+	 */
+	async getContact(rawAddress: string) {
+		const address = rawAddress.trim().toLowerCase();
+		const addresses = this.#contactAddresses(address);
+		const canonical = addresses[0];
+
+		const senderPh = addresses.map(() => "?").join(",");
+		const involved =
+			`(sender IN (${senderPh}) OR ` +
+			addresses.map(() => "recipient LIKE ?").join(" OR ") +
+			")";
+		const involvedParams = [...addresses, ...addresses.map((a) => `%${a}%`)];
+
+		const nameRow = [
+			...this.ctx.storage.sql.exec(
+				`SELECT sender_name FROM emails
+				 WHERE sender IN (${senderPh}) AND sender_name IS NOT NULL AND sender_name != ''
+				 ORDER BY date DESC LIMIT 1`,
+				...addresses,
+			),
+		][0] as { sender_name: string } | undefined;
+
+		const stats = [
+			...this.ctx.storage.sql.exec(
+				`SELECT COUNT(*) AS total,
+					SUM(CASE WHEN sender IN (${senderPh}) THEN 1 ELSE 0 END) AS received,
+					MIN(date) AS first_date, MAX(date) AS last_date
+				 FROM emails WHERE folder_id != ? AND ${involved}`,
+				...addresses,
+				Folders.TRASH,
+				...involvedParams,
+			),
+		][0] as any;
+
+		const conversations = [
+			...this.ctx.storage.sql.exec(
+				`WITH m AS (
+					SELECT id, subject, date, read, folder_id, COALESCE(thread_id, id) AS tkey,
+						SUBSTR(body, 1, 300) AS snippet
+					FROM emails WHERE folder_id != ? AND ${involved}
+				), latest AS (
+					SELECT *,
+						ROW_NUMBER() OVER (PARTITION BY tkey ORDER BY date DESC) AS rn,
+						COUNT(*) OVER (PARTITION BY tkey) AS message_count,
+						SUM(CASE WHEN read = 0 THEN 1 ELSE 0 END) OVER (PARTITION BY tkey) AS unread_count
+					FROM m
+				)
+				SELECT id, subject, date, folder_id, snippet, message_count, unread_count
+				FROM latest WHERE rn = 1 ORDER BY date DESC LIMIT 50`,
+				Folders.TRASH,
+				...involvedParams,
+			),
+		] as any[];
+
+		return {
+			email: canonical,
+			name: nameRow?.sender_name ?? null,
+			domain: canonical.includes("@") ? canonical.split("@")[1] : "",
+			addresses,
+			stats: {
+				total_messages: stats?.total ?? 0,
+				received_messages: stats?.received ?? 0,
+				first_date: stats?.first_date ?? null,
+				last_date: stats?.last_date ?? null,
+				conversation_count: conversations.length,
+			},
+			conversations: conversations.map((c) => ({
+				...c,
+				unread_count: c.unread_count ?? 0,
+			})),
+		};
+	}
+
+	/** Treat `address` as another address of the contact that owns `into`. */
+	async mergeContact(address: string, into: string) {
+		const source = this.#canonicalOf(address.trim().toLowerCase());
+		const target = this.#canonicalOf(into.trim().toLowerCase());
+		if (!source || !target || source === target) return false;
+		this.ctx.storage.sql.exec(
+			"UPDATE contact_aliases SET canonical = ?1 WHERE canonical = ?2",
+			target,
+			source,
+		);
+		this.ctx.storage.sql.exec(
+			"INSERT OR REPLACE INTO contact_aliases (email, canonical) VALUES (?1, ?2)",
+			source,
+			target,
+		);
+		return true;
+	}
+
+	/** Detach a merged alias from its contact. */
+	async unmergeContact(address: string) {
+		const addr = address.trim().toLowerCase();
+		const exists = [
+			...this.ctx.storage.sql.exec("SELECT 1 AS x FROM contact_aliases WHERE email = ?1", addr),
+		].length;
+		if (!exists) return false;
+		this.ctx.storage.sql.exec("DELETE FROM contact_aliases WHERE email = ?1", addr);
+		return true;
 	}
 
 	// ── Threading helpers (raw SQL) ────────────────────────────────
@@ -850,6 +1042,7 @@ export class MailboxDO extends DurableObject<Env> {
 				folder_id: folderId,
 				subject: email.subject,
 				sender: email.sender,
+				sender_name: email.sender_name ?? null,
 				recipient: email.recipient,
 				cc: email.cc ?? null,
 				bcc: email.bcc ?? null,

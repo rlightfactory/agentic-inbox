@@ -2,6 +2,8 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import ContactAvatar from "~/components/ContactAvatar";
+import { getRowPeople } from "~/lib/contacts";
 import { Badge, Button, Loader, Pagination, Tooltip } from "@cloudflare/kumo";
 import { ArrowLeftIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,13 +11,14 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import MailboxSplitView from "~/components/MailboxSplitView";
 import { formatListDate, getSnippetText } from "~/lib/utils";
 import { useUpdateEmail } from "~/queries/emails";
+import { useMailbox } from "~/queries/mailboxes";
 import { useSearchEmails, SEARCH_PAGE_SIZE } from "~/queries/search";
 import { useUIStore } from "~/hooks/useUIStore";
 import type { Email } from "~/types";
 
 function highlightTerms(text: string, query: string): React.ReactNode {
 	if (!query || !text) return text;
-	const freeText = query.replace(/\b(?:from|to|subject|in|is|has|before|after):"[^"]*"/gi, "").replace(/\b(?:from|to|subject|in|is|has|before|after):\S+/gi, "").trim();
+	const freeText = query.replace(/\b(?:from|contact|to|subject|in|is|has|before|after):"[^"]*"/gi, "").replace(/\b(?:from|contact|to|subject|in|is|has|before|after):\S+/gi, "").trim();
 	if (!freeText) return text;
 	try {
 		const escaped = freeText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -35,6 +38,7 @@ export default function SearchResultsRoute() {
 	const navigate = useNavigate();
 	const { selectedEmailId, isComposing, selectEmail, closePanel } = useUIStore();
 	const updateEmail = useUpdateEmail();
+	const { data: mailbox } = useMailbox(mailboxId);
 	const urlQuery = searchParams.get("q") || "";
 	const [page, setPage] = useState(1);
 	const searchKey = useMemo(
@@ -90,11 +94,13 @@ export default function SearchResultsRoute() {
 							const isSelected = selectedEmailId === email.id;
 							const snippet = getSnippetText(email.snippet, 120);
 							const folderName = (email as Email & { folder_name?: string }).folder_name;
+							const row = getRowPeople(email, mailbox?.email, folderName === "sent" || folderName === "draft" || folderName === "Sent" || folderName === "Drafts");
 							return (
 								<div key={email.id} role="button" tabIndex={0} onClick={() => handleRowClick(email)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleRowClick(email); } }} className={`group flex items-center gap-3 w-full text-left cursor-pointer transition-colors border-b border-kumo-line px-4 py-2.5 md:px-5 md:py-3 ${isPanelOpen ? "md:px-4 md:py-2.5" : ""} ${isSelected ? "bg-kumo-tint" : "hover:bg-kumo-tint"}`}>
 									<div className="w-2.5 shrink-0 flex justify-center">{!email.read && <div className="h-2 w-2 rounded-full bg-kumo-brand" />}</div>
+									<ContactAvatar label={row.primary.label} email={row.primary.email} size={36} />
 									<div className="min-w-0 flex-1">
-										<div className="flex items-center gap-2"><span className={`truncate text-sm ${!email.read ? "font-semibold text-kumo-default" : "text-kumo-strong"}`}>{highlightTerms(email.sender.split("@")[0], urlQuery)}</span>{folderName && <Badge variant="outline">{folderDisplayName(folderName)}</Badge>}<span className="text-sm text-kumo-subtle shrink-0 ml-auto">{formatListDate(email.date)}</span></div>
+										<div className="flex items-center gap-2"><span title={row.title} className={`truncate text-sm shrink-0 max-w-[60%] ${!email.read ? "font-semibold text-kumo-default" : "text-kumo-strong"}`}>{highlightTerms(row.label, urlQuery)}</span>{row.people.length === 1 && row.people[0].domain && <span className="hidden sm:inline min-w-0 truncate text-xs text-kumo-subtle">{row.people[0].domain}</span>}{folderName && <Badge variant="outline">{folderDisplayName(folderName)}</Badge>}<span className="text-sm text-kumo-subtle shrink-0 ml-auto">{formatListDate(email.date)}</span></div>
 										<div className={`truncate text-sm mt-0.5 ${!email.read ? "font-medium text-kumo-default" : "text-kumo-subtle"}`}>{highlightTerms(email.subject, urlQuery)}</div>
 										{snippet && <div className="truncate text-xs text-kumo-subtle mt-0.5">{highlightTerms(snippet, urlQuery)}</div>}
 									</div>

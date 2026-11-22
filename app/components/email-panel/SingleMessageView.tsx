@@ -2,6 +2,8 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import ContactAvatar from "~/components/ContactAvatar";
+import { parseAddress } from "~/lib/contacts";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
 import { formatDetailDate, rewriteInlineImages } from "~/lib/utils";
@@ -23,12 +25,17 @@ export default function SingleMessageView({
 			<div className="px-4 py-4 border-b border-kumo-line md:px-6">
 				<div className="flex items-center justify-between gap-3">
 					<div className="flex items-center gap-2.5 min-w-0">
-						<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-kumo-fill text-xs font-bold text-kumo-default">
-							{email.sender.charAt(0).toUpperCase()}
-						</div>
+						<ContactAvatar
+							label={parseAddress(email.sender, email.sender_name).label}
+							email={email.sender}
+							size={36}
+						/>
 						<div className="min-w-0">
 							<div className="text-sm font-medium text-kumo-default truncate">
-								{email.sender}
+								{parseAddress(email.sender, email.sender_name).label}
+								<span className="ml-2 text-xs font-normal text-kumo-subtle">
+									{email.sender}
+								</span>
 							</div>
 							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
 						</div>

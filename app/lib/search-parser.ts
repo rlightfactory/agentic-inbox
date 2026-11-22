@@ -7,6 +7,7 @@
  *
  * Supported operators:
  *   from:user@example.com    — filter by sender
+ *   contact:name-or-address  — every message to/from a contact (incl. merged addresses)
  *   to:user@example.com      — filter by recipient
  *   subject:hello             — filter by subject
  *   in:inbox / in:sent        — filter by folder
@@ -23,6 +24,7 @@
 export interface ParsedSearch {
 	query: string;
 	from?: string;
+	contact?: string;
 	to?: string;
 	subject?: string;
 	folder?: string;
@@ -35,7 +37,7 @@ export interface ParsedSearch {
 
 // Matches operator:value or operator:"quoted value"
 const OPERATOR_RE =
-	/\b(from|to|subject|in|is|has|before|after):(?:"([^"]*?)"|(\S+))/gi;
+	/\b(from|contact|to|subject|in|is|has|before|after):(?:"([^"]*?)"|(\S+))/gi;
 
 export function parseSearchQuery(input: string): ParsedSearch {
 	const result: ParsedSearch = { query: "" };
@@ -67,6 +69,9 @@ export function parseSearchQuery(input: string): ParsedSearch {
 		switch (op) {
 			case "from":
 				result.from = value;
+				break;
+			case "contact":
+				result.contact = value;
 				break;
 			case "to":
 				result.to = value;

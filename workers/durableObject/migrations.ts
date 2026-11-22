@@ -168,4 +168,19 @@ export const mailboxMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_emails_folder_date ON emails(folder_id, date DESC);
         `,
 	},
+	{
+		// Sender display names plus a table that links several addresses to
+		// one contact (alias -> canonical address). No txn() wrapper, same
+		// reasoning as migration 8.
+		name: "9_add_sender_name_and_contact_aliases",
+		sql: `
+            ALTER TABLE emails ADD COLUMN sender_name TEXT;
+            CREATE INDEX IF NOT EXISTS idx_emails_sender ON emails(sender);
+            CREATE TABLE IF NOT EXISTS contact_aliases (
+                email TEXT PRIMARY KEY,
+                canonical TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_contact_aliases_canonical ON contact_aliases(canonical);
+        `,
+	},
 ];

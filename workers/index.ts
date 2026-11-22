@@ -313,7 +313,7 @@ app.delete("/api/v1/mailboxes/:mailboxId/folders/:id", async (c: AppContext) => 
 
 app.get("/api/v1/mailboxes/:mailboxId/search", async (c: AppContext) => {
 	const searchOpts: Record<string, unknown> = {
-		query: c.req.query("query") || "", folder: c.req.query("folder"), from: c.req.query("from"),
+		query: c.req.query("query") || "", folder: c.req.query("folder"), from: c.req.query("from"), contact: c.req.query("contact"),
 		to: c.req.query("to"), subject: c.req.query("subject"), date_start: c.req.query("date_start"),
 		date_end: c.req.query("date_end"), is_read: boolQuery(c, "is_read"),
 		is_starred: boolQuery(c, "is_starred"), has_attachment: boolQuery(c, "has_attachment"),
@@ -322,6 +322,24 @@ app.get("/api/v1/mailboxes/:mailboxId/search", async (c: AppContext) => {
 	const emails = await stub.searchEmails({ ...searchOpts, page: intQuery(c, "page"), limit: intQuery(c, "limit") });
 	const totalCount = await stub.countSearchResults(searchOpts);
 	return c.json({ emails, totalCount });
+});
+
+// -- Contacts -------------------------------------------------------
+
+app.post("/api/v1/mailboxes/:mailboxId/contacts/merge", async (c: AppContext) => {
+	const body = await c.req.json().catch(() => ({})) as { email?: string; into?: string };
+	if (!body.email || !body.into) return c.json({ error: "email and into are required" }, 400);
+	const ok = await (c.var.mailboxStub as any).mergeContact(body.email, body.into);
+	return ok ? c.json({ status: "merged" }) : c.json({ error: "Addresses already belong to the same contact" }, 400);
+});
+
+app.delete("/api/v1/mailboxes/:mailboxId/contacts/aliases/:email", async (c: AppContext) => {
+	const ok = await (c.var.mailboxStub as any).unmergeContact(c.req.param("email")!);
+	return ok ? c.json({ status: "unmerged" }) : c.json({ error: "Alias not found" }, 404);
+});
+
+app.get("/api/v1/mailboxes/:mailboxId/contacts/:email", async (c: AppContext) => {
+	return c.json(await (c.var.mailboxStub as any).getContact(c.req.param("email")!));
 });
 
 // -- Attachments ----------------------------------------------------
@@ -409,7 +427,7 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 
 	await stub.createEmail(Folders.INBOX, {
 		id: messageId, subject: parsedEmail.subject || "",
-		sender: (parsedEmail.from?.address || "").toLowerCase(), recipient: allRecipients.join(", "),
+		sender: (parsedEmail.from?.address || "").toLowerCase(), sender_name: parsedEmail.from?.name?.trim() || null, recipient: allRecipients.join(", "),
 		cc: ccRecipients.join(", ") || null, bcc: bccRecipients.join(", ") || null,
 		date: new Date().toISOString(), // uses receive time, not the email's Date header
 		body: parsedEmail.html || parsedEmail.text || "",
