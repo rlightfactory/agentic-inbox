@@ -2,19 +2,32 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import AgentSidebar from "~/components/AgentSidebar";
 import ComposeEmail from "~/components/ComposeEmail";
 import Header from "~/components/Header";
+import ShortcutsDialog from "~/components/ShortcutsDialog";
 import Sidebar from "~/components/Sidebar";
+import { useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
+import { useShortcuts } from "~/hooks/useShortcuts";
 import { useUIStore } from "~/hooks/useUIStore";
 
 export default function MailboxRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
 	// Prefetch mailbox data for child components
-	useMailbox(mailboxId);
+	const { data: mailbox } = useMailbox(mailboxId);
+	const { data: folders = [] } = useFolders(mailboxId);
+	const [showShortcuts, setShowShortcuts] = useState(false);
+	useShortcuts({ "?": () => setShowShortcuts(true) });
+
+	// Unread count in the browser tab title, e.g. "(24) support@example.com".
+	const inboxUnread = folders.find((f) => f.id === "inbox")?.unreadCount ?? 0;
+	useEffect(() => {
+		const base = mailbox?.email ?? "Inbox";
+		document.title = inboxUnread > 0 ? `(${inboxUnread}) ${base}` : base;
+	}, [inboxUnread, mailbox?.email]);
 	const prevMailboxIdRef = useRef<string | undefined>(undefined);
 	const {
 		isSidebarOpen,
@@ -103,6 +116,7 @@ export default function MailboxRoute() {
 			)}
 
 			<ComposeEmail />
+			<ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
 		</div>
 	);
 }

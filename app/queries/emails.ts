@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api from "~/services/api";
+import api, { type ConversationAction } from "~/services/api";
 import type { Email } from "~/types";
 import { queryKeys } from "./keys";
 
@@ -183,6 +183,86 @@ export function useUpdateEmail() {
 			qc.invalidateQueries({
 				queryKey: queryKeys.folders.list(mailboxId),
 			});
+		},
+	});
+}
+
+/** Every message of the Gmail-style conversation that contains `emailId`. */
+export function useConversation(
+	mailboxId: string | undefined,
+	emailId: string | undefined | null,
+) {
+	const qc = useQueryClient();
+
+	return useQuery<Email[]>({
+		queryKey: mailboxId && emailId
+			? ([...queryKeys.emails.detail(mailboxId, emailId), "conversation"] as const)
+			: ["emails", "_disabled_conversation"],
+		queryFn: async ({ signal }) => {
+			const emails = await api.getConversation(mailboxId!, emailId!, { signal }) as Email[];
+			for (const email of emails) {
+				qc.setQueryData(queryKeys.emails.detail(mailboxId!, email.id), email);
+			}
+			return emails;
+		},
+		enabled: !!mailboxId && !!emailId,
+	});
+}
+
+export function useMarkConversationRead() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ mailboxId, emailId }: { mailboxId: string; emailId: string }) =>
+			api.markConversationRead(mailboxId, emailId),
+		onSuccess: (_data, { mailboxId }) => {
+			qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
+			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
+		},
+	});
+}
+
+/** Archive, trash, move, delete, read/unread or star whole conversations. */
+export function useConversationAction() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			mailboxId,
+			emailIds,
+			action,
+			folderId,
+		}: {
+			mailboxId: string;
+			emailIds: string[];
+			action: ConversationAction;
+			folderId?: string;
+		}) => api.conversationAction(mailboxId, emailIds, action, folderId),
+		onSettled: (_data, _err, { mailboxId }) => {
+			qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
+			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
+		},
+	});
+}
+
+export function useMarkFolderRead() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ mailboxId, folderId }: { mailboxId: string; folderId: string }) =>
+			api.markFolderRead(mailboxId, folderId),
+		onSettled: (_data, _err, { mailboxId }) => {
+			qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
+			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
+		},
+	});
+}
+
+export function useEmptyFolder() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ mailboxId, folderId }: { mailboxId: string; folderId: string }) =>
+			api.emptyFolder(mailboxId, folderId),
+		onSettled: (_data, _err, { mailboxId }) => {
+			qc.invalidateQueries({ queryKey: ["emails", mailboxId] });
+			qc.invalidateQueries({ queryKey: queryKeys.folders.list(mailboxId) });
 		},
 	});
 }

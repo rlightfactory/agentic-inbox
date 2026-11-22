@@ -3,7 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useKumoToastManager } from "@cloudflare/kumo";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Folders } from "shared/folders";
 import ContactCard from "~/components/email-panel/ContactCard";
@@ -15,7 +15,8 @@ import ThreadMessage from "~/components/email-panel/ThreadMessage";
 import { parseAddress } from "~/lib/contacts";
 import { splitEmailList, toEmailListValue } from "~/lib/utils";
 import api from "~/services/api";
-import { useDeleteEmail, useEmail, useMoveEmail, useReplyToEmail, useSendEmail, useThreadReplies, useUpdateEmail } from "~/queries/emails";
+import { useConversation, useConversationAction, useDeleteEmail, useEmail, useReplyToEmail, useSendEmail, useUpdateEmail } from "~/queries/emails";
+import { useShortcuts } from "~/hooks/useShortcuts";
 import { useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
@@ -47,19 +48,21 @@ function blobToBase64(blob: Blob): Promise<string> {
 export default function EmailPanel({ emailId }: { emailId: string }) {
 	const { mailboxId, folder } = useParams<{ mailboxId: string; folder: string }>();
 	const { data: email } = useEmail(mailboxId, emailId) as { data?: Email };
-	const { data: threadRepliesRaw } = useThreadReplies(mailboxId, email?.thread_id) as {
+	const { data: threadRepliesRaw } = useConversation(mailboxId, emailId) as {
 		data?: Email[];
 	};
 	const updateEmail = useUpdateEmail();
 	const deleteEmailMut = useDeleteEmail();
-	const moveEmailMut = useMoveEmail();
+	const conversationAction = useConversationAction();
 	const sendEmailMut = useSendEmail();
 	const replyMut = useReplyToEmail();
 	const { data: folders = [] } = useFolders(mailboxId) as { data?: Folder[] };
 	const { data: currentMailbox } = useMailbox(mailboxId) as {
 		data?: Mailbox;
 	};
-	const { closePanel, startCompose } = useUIStore();
+	const { closePanel, startCompose, isComposing } = useUIStore();
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const initializedFor = useRef<string | null>(null);
 	const toastManager = useKumoToastManager();
 	const [isSending, setIsSending] = useState(false);
 	const [sourceViewEmail, setSourceViewEmail] = useState<Email | null>(null);
@@ -74,13 +77,25 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const allMessages = useMemo(() => {
 		if (!email) return [];
-		return [email, ...threadReplies].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+		return [email, ...threadReplies].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 	}, [email, threadReplies]);
 
 	// Reset expanded state only when the selected email changes, not on every refetch.
 	// Using allMessages as a dependency would reset user expand/collapse state on background refetches.
 	const currentEmailId = email?.id;
-	useEffect(() => { if (allMessages.length > 1) setExpandedMessages(new Set([allMessages[0].id])); }, [currentEmailId]); // eslint-disable-line react-hooks/exhaustive-deps
+	// Once the whole conversation has loaded: expand the newest message plus any
+	// unread ones, collapse the rest, and scroll the newest into view (Gmail style).
+	// Runs once per opened email, so background refetches don't undo manual toggles.
+	useEffect(() => {
+		if (!currentEmailId || allMessages.length < 2) return;
+		if (initializedFor.current === currentEmailId) return;
+		initializedFor.current = currentEmailId;
+		const newest = allMessages[allMessages.length - 1];
+		setExpandedMessages(new Set([newest.id, ...allMessages.filter((m) => m.id !== newest.id && !m.read).map((m) => m.id)]));
+		requestAnimationFrame(() => {
+			scrollRef.current?.querySelector("[data-latest]")?.scrollIntoView({ block: "start" });
+		});
+	}, [currentEmailId, allMessages]);
 
 	const toggleExpand = (msgId: string) => { setExpandedMessages((prev) => { const next = new Set(prev); if (next.has(msgId)) next.delete(msgId); else next.add(msgId); return next; }); };
 
@@ -92,19 +107,67 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 
 	const lastReceivedMessage = useMemo(() => {
 		const ce = currentMailbox?.email;
-		const received = allMessages.filter((msg) => !draftMessageIds.has(msg.id) && msg.sender !== ce);
+		const newestFirst = [...allMessages].reverse();
+		const received = newestFirst.filter((msg) => !draftMessageIds.has(msg.id) && msg.sender !== ce);
 		if (received.length > 0) return received[0];
-		const nonDrafts = allMessages.filter((msg) => !draftMessageIds.has(msg.id));
+		const nonDrafts = newestFirst.filter((msg) => !draftMessageIds.has(msg.id));
 		return nonDrafts.length > 0 ? nonDrafts[0] : email;
 	}, [allMessages, draftMessageIds, currentMailbox?.email, email]);
+
+	// Reply / reply all / forward from the keyboard (Gmail: r, a, f).
+	useShortcuts(
+		{
+			r: () => { if (email) startCompose({ mode: "reply", originalEmail: lastReceivedMessage }); },
+			a: () => { if (email) startCompose({ mode: "reply-all", originalEmail: lastReceivedMessage }); },
+			f: () => { if (email) startCompose({ mode: "forward", originalEmail: email }); },
+		},
+		!!email && !isDraftFolder && !isComposing,
+	);
 
 	const moveToFolders = useMemo(() => { const cur = folder || email?.folder_id; return folders.filter((f) => f.id !== cur); }, [folders, folder, email?.folder_id]);
 
 	if (!email) return <EmailPanelSkeleton />;
 
 	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, data: { starred: !email.starred } }); };
-	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); closePanel(); } };
-	const handleDelete = () => { if (mailboxId) { if (!window.confirm("Are you sure you want to delete this email?")) return; deleteEmailMut.mutate({ mailboxId, id: email.id }); closePanel(); } };
+	const moveConversation = async (action: "archive" | "trash" | "move", doneLabel: string, folderId?: string) => {
+		if (!mailboxId) return;
+		try {
+			const result = await conversationAction.mutateAsync({ mailboxId, emailIds: [email.id], action, folderId });
+			closePanel();
+			const origin = result.originalFolder;
+			toastManager.add({
+				title: `Conversation ${doneLabel}`,
+				actions: origin && result.affected.length > 0
+					? [{
+						children: "Undo",
+						variant: "secondary",
+						size: "sm",
+						onClick: () => conversationAction.mutate({ mailboxId, emailIds: result.affected, action: "move_messages", folderId: origin }),
+					}]
+					: undefined,
+			});
+		} catch {
+			toastManager.add({ title: "Action failed. Please try again.", variant: "error" });
+		}
+	};
+	const handleMove = (folderId: string) => { moveConversation("move", "moved", folderId); };
+	const handleArchive = () => { moveConversation("archive", "archived"); };
+	const inTrash = folder === Folders.TRASH || email.folder_id === Folders.TRASH;
+	const handleDelete = async () => {
+		if (!mailboxId) return;
+		if (isDraftFolder || inTrash) {
+			if (!window.confirm("Delete this permanently? This cannot be undone.")) return;
+			try {
+				if (isDraftFolder) await deleteEmailMut.mutateAsync({ mailboxId, id: email.id });
+				else await conversationAction.mutateAsync({ mailboxId, emailIds: [email.id], action: "delete" });
+				closePanel();
+			} catch {
+				toastManager.add({ title: "Failed to delete", variant: "error" });
+			}
+			return;
+		}
+		moveConversation("trash", "moved to Trash");
+	};
 
 	const handleEditDraft = (draftMsg?: Email) => {
 		const target = draftMsg || email;
@@ -207,6 +270,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					}
 				}}
 				onMove={handleMove}
+				canArchive={!isDraftFolder && folder !== Folders.ARCHIVE && email.folder_id !== Folders.ARCHIVE}
+				onArchive={handleArchive}
+				deleteLabel={isDraftFolder || inTrash ? "Delete forever" : "Move to Trash"}
 				onViewSource={() => setSourceViewEmail(email)}
 				onDelete={handleDelete}
 			/>
@@ -226,13 +292,11 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				/>
 			)}
 
-			<div className="flex-1 overflow-y-auto">
+			<div ref={scrollRef} className="flex-1 overflow-y-auto">
 				{hasThread ? (
 					allMessages.map((msg, idx) => {
 						const isDraft = draftMessageIds.has(msg.id);
-						return (
-							<ThreadMessage
-								key={msg.id}
+						return (<div key={msg.id} data-latest={idx === allMessages.length - 1 ? "" : undefined}><ThreadMessage
 								email={msg}
 								mailboxId={mailboxId}
 								mailboxEmail={currentMailbox?.email}
@@ -248,7 +312,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 								onPreviewImage={(url, filename) =>
 									setPreviewImage({ url, filename })
 								}
-							/>
+							/></div>
 						);
 					})
 				) : (

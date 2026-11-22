@@ -10,6 +10,7 @@
  */
 import DOMPurify from "dompurify";
 import { formatQuotedDate } from "shared/dates";
+import { htmlToText } from "shared/html";
 import type { Attachment } from "~/types";
 
 export {
@@ -74,8 +75,8 @@ export function htmlToPlainText(html: string): string {
 /**
  * Strip all HTML tags from a string.
  */
-export function stripHtml(html: string): string {
-	return html.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+export function stripHtml(html: string, keepLines = false): string {
+	return htmlToText(html, keepLines);
 }
 
 function decodeHtmlEntities(text: string): string {
@@ -166,7 +167,7 @@ export function buildQuotedReplyBlock(
 	// The original HTML renders safely in the sandboxed iframe, but quoted
 	// reply blocks are injected into the compose editor where raw HTML would
 	// execute. Convert to escaped plain text instead.
-	const bodyToQuote = escapeHtml(stripHtml(body)).replace(/\n/g, "<br>");
+	const bodyToQuote = escapeHtml(stripHtml(body, true)).replace(/\n/g, "<br>");
 
 	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${formattedDate}, ${escapedSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
 }

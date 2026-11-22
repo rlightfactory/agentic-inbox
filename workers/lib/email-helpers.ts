@@ -8,6 +8,7 @@
  * Includes: DO stub helpers, sender validation, message-ID generation,
  * threading, HTML utilities, and tool-logic (getFullEmail / getFullThread).
  */
+import { htmlToText } from "../../shared/html";
 import type { MailboxDO } from "../durableObject";
 import type { EmailFull } from "./schemas";
 import { Folders } from "../../shared/folders";
@@ -179,14 +180,8 @@ export function textToHtml(text: string): string {
  * Removes <style> and <script> blocks first to avoid injecting their
  * content into the output.
  */
-export function stripHtmlToText(html: string): string {
-	if (!html) return "";
-	return html
-		.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-		.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-		.replace(/<[^>]+>/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
+export function stripHtmlToText(html: string, keepLines = false): string {
+	return htmlToText(html, keepLines);
 }
 
 /**
@@ -213,7 +208,7 @@ export function buildQuotedReplyBlock(original: {
 	// The original HTML renders safely in the sandboxed iframe, but quoted
 	// reply blocks are injected into the compose editor and outgoing emails
 	// where raw HTML would execute. Convert to escaped plain text instead.
-	const plainBody = stripHtmlToText(original.body);
+	const plainBody = stripHtmlToText(original.body, true);
 	const bodyToQuote = escapeHtml(plainBody).replace(/\n/g, "<br>");
 
 	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${originalDate}, ${originalSender} wrote:<br><br>${bodyToQuote}</blockquote>`;

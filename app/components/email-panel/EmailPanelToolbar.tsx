@@ -5,6 +5,7 @@
 import { Button, Tooltip } from "@cloudflare/kumo";
 import { useEffect, useRef, useState } from "react";
 import {
+	ArchiveIcon,
 	ArrowBendUpLeftIcon,
 	ArrowBendUpRightIcon,
 	ArrowLeftIcon,
@@ -37,6 +38,9 @@ interface EmailPanelToolbarProps {
 	onToggleStar: () => void;
 	onToggleRead: () => void;
 	onMove: (folderId: string) => void;
+	canArchive?: boolean;
+	onArchive?: () => void;
+	deleteLabel?: string;
 	onViewSource: () => void;
 	onDelete: () => void;
 }
@@ -56,6 +60,9 @@ export default function EmailPanelToolbar({
 	onToggleStar,
 	onToggleRead,
 	onMove,
+	canArchive,
+	onArchive,
+	deleteLabel = "Delete",
 	onViewSource,
 	onDelete,
 }: EmailPanelToolbarProps) {
@@ -156,6 +163,19 @@ export default function EmailPanelToolbar({
 				/>
 			</Tooltip>
 
+			{canArchive && onArchive && (
+				<Tooltip content="Archive (e)" side="bottom" asChild>
+					<Button
+						variant="ghost"
+						shape="square"
+						size="sm"
+						icon={<ArchiveIcon size={18} />}
+						onClick={onArchive}
+						aria-label="Archive"
+					/>
+				</Tooltip>
+			)}
+
 			<MoveToFolderMenu folders={moveToFolders} onMove={onMove} />
 
 			<div className="ml-auto flex items-center gap-0.5">
@@ -169,14 +189,14 @@ export default function EmailPanelToolbar({
 						aria-label="View source"
 					/>
 				</Tooltip>
-				<Tooltip content="Delete" side="bottom" asChild>
+				<Tooltip content={deleteLabel} side="bottom" asChild>
 					<Button
 						variant="ghost"
 						shape="square"
 						size="sm"
 						icon={<TrashIcon size={18} />}
 						onClick={onDelete}
-						aria-label="Delete"
+						aria-label={deleteLabel}
 					/>
 				</Tooltip>
 				<Tooltip content="Close" side="bottom" asChild>

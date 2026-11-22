@@ -95,6 +95,17 @@ function del<T>(url: string) {
 
 // ---------- Typed response shapes ----------
 
+export type ConversationAction =
+	| "archive"
+	| "trash"
+	| "move"
+	| "delete"
+	| "read"
+	| "unread"
+	| "star"
+	| "unstar"
+	| "move_messages";
+
 interface EmailListResponse {
 	emails: Email[];
 	totalCount: number;
@@ -133,6 +144,24 @@ const api = {
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${id}/move`, { folderId }),
 	getThread: (mailboxId: string, threadId: string, opts?: { signal?: AbortSignal }) =>
 		get<Email[]>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}`, { signal: opts?.signal }),
+	getConversation: (mailboxId: string, emailId: string, opts?: { signal?: AbortSignal }) =>
+		get<Email[]>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/conversation`, { signal: opts?.signal }),
+	conversationAction: (
+		mailboxId: string,
+		emailIds: string[],
+		action: ConversationAction,
+		folderId?: string,
+	) =>
+		post<{ affected: string[]; originalFolder: string | null }>(
+			`/api/v1/mailboxes/${mailboxId}/conversations/action`,
+			{ emailIds, action, folderId },
+		),
+	markFolderRead: (mailboxId: string, folderId: string) =>
+		post<void>(`/api/v1/mailboxes/${mailboxId}/folders/${folderId}/read-all`),
+	emptyFolder: (mailboxId: string, folderId: string) =>
+		post<{ deleted: number }>(`/api/v1/mailboxes/${mailboxId}/folders/${folderId}/empty`),
+	markConversationRead: (mailboxId: string, emailId: string) =>
+		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/conversation/read`),
 	markThreadRead: (mailboxId: string, threadId: string) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/threads/${threadId}/read`),
 	getAttachment: (mailboxId: string, emailId: string, attachmentId: string) =>

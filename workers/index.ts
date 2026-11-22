@@ -157,11 +157,13 @@ app.get("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	const limit = intQuery(c, "limit");
 	const sortColumn = c.req.query("sortColumn") as any;
 	const sortDirection = c.req.query("sortDirection") as "ASC" | "DESC" | undefined;
+	const filterParam = c.req.query("filter");
+	const filter = filterParam === "unread" || filterParam === "starred" ? filterParam : undefined;
 	const stub = c.var.mailboxStub;
 
 	if (threaded && folder) {
-		const emails = await (stub as any).getThreadedEmails({ folder, page, limit });
-		const totalCount = await (stub as any).countThreadedEmails(folder);
+		const emails = await (stub as any).getThreadedEmails({ folder, page, limit, filter });
+		const totalCount = await (stub as any).countThreadedEmails(folder, filter);
 		return c.json({ emails, totalCount });
 	}
 	const emails = await stub.getEmails({ folder, thread_id, page, limit, sortColumn, sortDirection });
@@ -242,6 +244,15 @@ app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
 	return c.json({ id: messageId, status: "draft", subject: subject || "", recipient: to || "", date: now }, 201);
 });
 
+app.get("/api/v1/mailboxes/:mailboxId/emails/:id/conversation", async (c: AppContext) => {
+	return c.json(await (c.var.mailboxStub as any).getConversationEmails(c.req.param("id")!));
+});
+
+app.post("/api/v1/mailboxes/:mailboxId/emails/:id/conversation/read", async (c: AppContext) => {
+	await (c.var.mailboxStub as any).markConversationRead(c.req.param("id")!);
+	return c.json({ status: "marked_read" });
+});
+
 app.get("/api/v1/mailboxes/:mailboxId/emails/:id", async (c: AppContext) => {
 	const email = await c.var.mailboxStub.getEmail(c.req.param("id")!);
 	if (!email) return c.json({ error: "Email not found" }, 404);
@@ -270,6 +281,26 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/move", async (c: AppContext) =
 	return success ? c.json({ status: "moved" }) : c.json({ error: "Folder not found" }, 400);
 });
 
+// -- Conversation actions -------------------------------------------
+
+const CONVERSATION_ACTIONS = new Set(["archive", "trash", "move", "delete", "read", "unread", "star", "unstar", "move_messages"]);
+
+/** Apply an action (archive, trash, move, delete, read, unread, star, unstar) to whole conversations. */
+app.post("/api/v1/mailboxes/:mailboxId/conversations/action", async (c: AppContext) => {
+	const body = await c.req.json().catch(() => ({})) as { emailIds?: string[]; action?: string; folderId?: string };
+	if (!Array.isArray(body.emailIds) || body.emailIds.length === 0 || body.emailIds.length > 200 || body.emailIds.some((id) => typeof id !== "string")) {
+		return c.json({ error: "emailIds must be a list of 1-200 ids" }, 400);
+	}
+	if (!body.action || !CONVERSATION_ACTIONS.has(body.action)) return c.json({ error: "Unknown action" }, 400);
+	if ((body.action === "move" || body.action === "move_messages") && !body.folderId) return c.json({ error: "folderId is required" }, 400);
+
+	const result = await (c.var.mailboxStub as any).applyConversationAction(body.emailIds, body.action, body.folderId);
+	if (result.removedAttachments.length > 0) {
+		await c.env.BUCKET.delete(result.removedAttachments.map((a: any) => `attachments/${a.emailId}/${a.id}/${a.filename}`));
+	}
+	return c.json({ affected: result.affected, originalFolder: result.originalFolder });
+});
+
 // -- Threads --------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/threads/:threadId", async (c: AppContext) => {
@@ -289,6 +320,20 @@ app.post("/api/v1/mailboxes/:mailboxId/emails/:id/forward", handleForwardEmail);
 // -- Folders --------------------------------------------------------
 
 app.get("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => c.json(await c.var.mailboxStub.getFolders()));
+
+app.post("/api/v1/mailboxes/:mailboxId/folders/:id/read-all", async (c: AppContext) => {
+	await (c.var.mailboxStub as any).markFolderRead(c.req.param("id")!);
+	return c.json({ status: "marked_read" });
+});
+
+app.post("/api/v1/mailboxes/:mailboxId/folders/:id/empty", async (c: AppContext) => {
+	const result = await (c.var.mailboxStub as any).emptyFolder(c.req.param("id")!);
+	if (!result) return c.json({ error: "Only Trash and Spam can be emptied" }, 400);
+	if (result.removedAttachments.length > 0) {
+		await c.env.BUCKET.delete(result.removedAttachments.map((a: any) => `attachments/${a.emailId}/${a.id}/${a.filename}`));
+	}
+	return c.json({ deleted: result.deleted });
+});
 
 app.post("/api/v1/mailboxes/:mailboxId/folders", async (c: AppContext) => {
 	const { name } = (await c.req.json()) as { name: string };
