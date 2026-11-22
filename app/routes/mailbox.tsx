@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import AgentSidebar from "~/components/AgentSidebar";
+import CommandPalette from "~/components/CommandPalette";
 import ComposeEmail from "~/components/ComposeEmail";
 import Header from "~/components/Header";
 import ShortcutsDialog from "~/components/ShortcutsDialog";
@@ -21,6 +22,20 @@ export default function MailboxRoute() {
 	const { data: folders = [] } = useFolders(mailboxId);
 	const [showShortcuts, setShowShortcuts] = useState(false);
 	useShortcuts({ "?": () => setShowShortcuts(true) });
+
+	// Cmd/Ctrl+K toggles the command palette (works even while typing).
+	const { isCommandPaletteOpen, openCommandPalette, closeCommandPalette } = useUIStore();
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+				e.preventDefault();
+				if (isCommandPaletteOpen) closeCommandPalette();
+				else openCommandPalette();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [isCommandPaletteOpen, openCommandPalette, closeCommandPalette]);
 
 	// Unread count in the browser tab title, e.g. "(24) support@example.com".
 	const inboxUnread = folders.find((f) => f.id === "inbox")?.unreadCount ?? 0;
@@ -117,6 +132,7 @@ export default function MailboxRoute() {
 
 			<ComposeEmail />
 			<ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
+			<CommandPalette onShowShortcuts={() => setShowShortcuts(true)} />
 		</div>
 	);
 }

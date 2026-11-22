@@ -92,6 +92,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				/>
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<title>Agentic Inbox</title>
+				<link rel="preconnect" href="https://fonts.googleapis.com" />
+				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+				<link
+					rel="stylesheet"
+					href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+				/>
 				<Meta />
 				<Links />
 			</head>

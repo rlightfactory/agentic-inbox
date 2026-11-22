@@ -49,6 +49,7 @@ export const SHORTCUT_HELP: { keys: string; description: string }[] = [
 	{ keys: "f", description: "Forward" },
 	{ keys: "c", description: "Compose" },
 	{ keys: "/", description: "Search" },
+	{ keys: "⌘K / Ctrl+K", description: "Command palette" },
 	{ keys: "Esc", description: "Clear selection / close" },
 	{ keys: "?", description: "Show this help" },
 ];

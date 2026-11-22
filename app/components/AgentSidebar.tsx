@@ -47,37 +47,41 @@ export default function AgentSidebar() {
 
 	return (
 		<div className="flex flex-col h-full">
-			{/* Tab bar */}
-			<div className="flex items-center border-b border-kumo-line shrink-0">
-				<button
-					type="button"
-					onClick={() => setActiveTab("agent")}
-					className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 bg-transparent cursor-pointer ${
-						activeTab === "agent"
-							? "border-kumo-brand text-kumo-default"
-							: "border-transparent text-kumo-subtle hover:text-kumo-default"
-					}`}
-				>
-					<RobotIcon size={14} weight={activeTab === "agent" ? "fill" : "regular"} />
-					Agent
-				</button>
-				<button
-					type="button"
-					onClick={() => setActiveTab("mcp")}
-					className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 bg-transparent cursor-pointer ${
-						activeTab === "mcp"
-							? "border-kumo-brand text-kumo-default"
-							: "border-transparent text-kumo-subtle hover:text-kumo-default"
-					}`}
-				>
-					<PlugsIcon size={14} weight={activeTab === "mcp" ? "fill" : "regular"} />
-					MCP
-				</button>
+			{/* Tab bar: segmented control */}
+			<div className="flex items-center gap-2 border-b border-kumo-line px-3 py-2.5 shrink-0">
+				<div className="flex flex-1 items-center gap-1 rounded-lg bg-kumo-fill p-1" role="tablist" aria-label="Assistant panels">
+					{(
+						[
+							{ id: "agent", label: "Agent", icon: RobotIcon },
+							{ id: "mcp", label: "MCP", icon: PlugsIcon },
+						] as const
+					).map((tab) => {
+						const active = activeTab === tab.id;
+						const Icon = tab.icon;
+						return (
+							<button
+								key={tab.id}
+								type="button"
+								role="tab"
+								aria-selected={active}
+								onClick={() => setActiveTab(tab.id)}
+								className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border-0 px-3 py-1.5 text-sm font-medium transition-all cursor-pointer ${
+									active
+										? "bg-kumo-base text-kumo-default shadow-sm"
+										: "bg-transparent text-kumo-subtle hover:text-kumo-default"
+								}`}
+							>
+								<Icon size={14} weight={active ? "fill" : "regular"} />
+								{tab.label}
+							</button>
+						);
+					})}
+				</div>
 				{/* Close -- mobile overlay only */}
 				<button
 					type="button"
 					onClick={closeAgentPanel}
-					className="ml-auto mr-2 p-1.5 rounded text-kumo-subtle hover:text-kumo-default hover:bg-kumo-tint transition-colors cursor-pointer bg-transparent border-0 lg:hidden"
+					className="p-1.5 rounded text-kumo-subtle hover:text-kumo-default hover:bg-kumo-tint transition-colors cursor-pointer bg-transparent border-0 lg:hidden"
 					aria-label="Close agent panel"
 				>
 					<XIcon size={16} />

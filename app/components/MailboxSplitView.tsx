@@ -31,7 +31,10 @@ export default function MailboxSplitView({
 				{children}
 			</div>
 			{isPanelOpen && (
-				<div className="flex-1 flex flex-col min-w-0 overflow-hidden w-full md:w-auto">
+				<div
+					key={isComposing ? "compose" : selectedEmailId}
+					className="animate-panel-in flex-1 flex flex-col min-w-0 overflow-hidden w-full md:w-auto"
+				>
 					{isComposing && !selectedEmailId ? (
 						<ComposePanel />
 					) : isComposing && selectedEmailId ? (

@@ -200,6 +200,10 @@ const api = {
 	deleteFolder: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`),
 
+	// AI compose helpers
+	rewriteDraft: (mailboxId: string, body: string, mode: "polish" | "friendly" | "shorter") =>
+		post<{ body: string; changed: boolean }>(`/api/v1/mailboxes/${mailboxId}/ai/rewrite`, { body, mode }),
+
 	// Contacts
 	getContact: (mailboxId: string, email: string, opts?: { signal?: AbortSignal }) =>
 		get<Contact>(`/api/v1/mailboxes/${mailboxId}/contacts/${encodeURIComponent(email)}`, { signal: opts?.signal }),

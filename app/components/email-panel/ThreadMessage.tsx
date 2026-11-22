@@ -74,7 +74,12 @@ export default function ThreadMessage({
 	onPreviewImage,
 }: ThreadMessageProps) {
 	const isSelf = email.sender === mailboxEmail;
-	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
+	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : isSelf ? "bg-kumo-brand/[0.04]" : ""}`;
+	// Our own messages get a "You" pill so the back-and-forth reads at a glance.
+	const senderLabelClass =
+		isSelf && !isDraft
+			? "rounded-full bg-kumo-brand/10 px-2 py-0.5 text-xs font-semibold text-kumo-link"
+			: "text-sm font-medium text-kumo-default truncate";
 	const senderLabel = isDraft ? "Draft reply" : isSelf ? "You" : parseAddress(email.sender, email.sender_name).label;
 
 	if (!isExpanded) {
@@ -83,12 +88,12 @@ export default function ThreadMessage({
 				<button
 					type="button"
 					onClick={onToggleExpand}
-					className="w-full flex items-center gap-3 px-4 py-3 hover:bg-kumo-tint rounded-lg text-left"
+					className="w-full flex items-center gap-3 px-4 py-3 hover:bg-kumo-tint rounded-lg text-left border border-transparent hover:border-kumo-line transition-colors"
 				>
 					<Avatar isDraft={isDraft} isSelf={isSelf} sender={email.sender} name={email.sender_name} />
 					<div className="flex-1 min-w-0">
 						<div className="flex items-center justify-between">
-							<span title={isSelf || isDraft ? undefined : email.sender} className="text-sm font-medium text-kumo-default truncate">
+							<span title={isSelf || isDraft ? undefined : email.sender} className={senderLabelClass}>
 								{senderLabel}
 							</span>
 							<span className="text-xs text-kumo-subtle shrink-0">
@@ -122,7 +127,7 @@ export default function ThreadMessage({
 						</button>
 						<div className="min-w-0">
 							<div className="flex items-center gap-2">
-								<span className="text-sm font-medium text-kumo-default truncate">
+								<span className={senderLabelClass}>
 									{senderLabel}
 								</span>
 								{!isDraft && !isSelf && (<span className="hidden sm:inline text-xs text-kumo-subtle truncate">{email.sender}</span>)}

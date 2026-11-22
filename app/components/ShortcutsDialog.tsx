@@ -21,11 +21,7 @@ export default function ShortcutsDialog({
 				<dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm mb-5">
 					{SHORTCUT_HELP.map((s) => (
 						<div key={s.keys} className="contents">
-							<dt>
-								<kbd className="rounded border border-kumo-line bg-kumo-fill px-1.5 py-0.5 font-mono text-xs text-kumo-default">
-									{s.keys}
-								</kbd>
-							</dt>
+							<dt className="text-kumo-default"><kbd className="kbd">{s.keys}</kbd></dt>
 							<dd className="text-kumo-strong">{s.description}</dd>
 						</div>
 					))}

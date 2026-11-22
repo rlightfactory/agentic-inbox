@@ -148,30 +148,36 @@ export default function ContactCard({
 			{expanded && (
 				<div className="px-4 pb-3 pt-1 md:px-6 space-y-3">
 					{/* Facts, one per line so nothing is cut off */}
-					<dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-						{contact.domain && (
-							<>
-								<dt className="text-kumo-subtle">Company</dt>
-								<dd className="text-kumo-default">{contact.domain}</dd>
-							</>
-						)}
-						<dt className="text-kumo-subtle">Messages</dt>
-						<dd className="text-kumo-default">
-							{stats.total_messages} ({stats.received_messages} received)
-						</dd>
-						{stats.first_date && (
-							<>
-								<dt className="text-kumo-subtle">First contact</dt>
-								<dd className="text-kumo-default">{formatDay(stats.first_date)}</dd>
-							</>
-						)}
-						{stats.last_date && (
-							<>
-								<dt className="text-kumo-subtle">Last contact</dt>
-								<dd className="text-kumo-default">{formatDay(stats.last_date)}</dd>
-							</>
-						)}
-					</dl>
+					<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+						{[
+							{ label: "Company", value: contact.domain || "\u2014" },
+							{ label: "Conversations", value: String(stats.conversation_count) },
+							{
+								label: "Messages",
+								value: `${stats.total_messages} (${stats.received_messages} in)`,
+							},
+							{
+								label: "First \u2192 last",
+								value: `${formatDay(stats.first_date) || "\u2014"} \u2192 ${formatDay(stats.last_date) || "\u2014"}`,
+								small: true,
+							},
+						].map((tile) => (
+							<div
+								key={tile.label}
+								className="min-w-0 rounded-lg border border-kumo-line bg-kumo-base px-2.5 py-2"
+							>
+								<div className="text-[11px] font-medium uppercase tracking-wide text-kumo-subtle">
+									{tile.label}
+								</div>
+								<div
+									title={tile.value}
+									className={`mt-0.5 truncate font-semibold text-kumo-default ${tile.small ? "text-xs leading-5" : "text-sm"}`}
+								>
+									{tile.value}
+								</div>
+							</div>
+						))}
+					</div>
 
 					<div className="flex flex-wrap items-center gap-2">
 						<Button

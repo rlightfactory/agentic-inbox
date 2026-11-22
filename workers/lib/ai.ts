@@ -239,3 +239,60 @@ export async function verifyDraft(ai: Ai, body: string): Promise<string> {
 function normalizeWhitespace(s: string): string {
 	return s.replace(/\s+/g, " ").trim();
 }
+
+// ── Draft rewriting (compose helpers) ──────────────────────────────
+
+export type RewriteMode = "polish" | "friendly" | "shorter";
+
+const REWRITE_INSTRUCTIONS: Record<RewriteMode, string> = {
+	polish:
+		"Polish the email: fix grammar, spelling and awkward phrasing and make it clear and professional. Keep the meaning, facts and tone.",
+	friendly:
+		"Rewrite the email to sound warm, friendly and polite while staying professional. Keep every fact and request.",
+	shorter:
+		"Rewrite the email to be noticeably shorter and more direct. Keep every fact, number, date and request.",
+};
+
+const REWRITE_RULES = `Rules:
+- Reply in the SAME language as the email.
+- Do not invent facts, names, prices or commitments.
+- Keep the greeting and sign-off if present; do not add a subject line.
+- Output ONLY the rewritten email text, with no explanation, quotes or markdown.`;
+
+/**
+ * Rewrite the editable part of a compose body. The quoted original and the
+ * signature block are left untouched; if the model returns nothing usable the
+ * original body is returned unchanged.
+ */
+export async function rewriteDraft(
+	ai: Ai,
+	body: string,
+	mode: RewriteMode,
+): Promise<{ body: string; changed: boolean }> {
+	const cut = body.search(
+		/(?:<br\s*\/?>\s*)?<blockquote|<div style="border-top: 1px solid #ccc|<div style="border: 1px solid #ddd/i,
+	);
+	const editable = cut >= 0 ? body.slice(0, cut) : body;
+	const tail = cut >= 0 ? body.slice(cut) : "";
+
+	const isHtml = /<[a-z][\s\S]*>/i.test(editable);
+	const text = (isHtml ? stripHtmlToText(editable, true) : editable).trim();
+	if (text.length < 3) return { body, changed: false };
+
+	const response = (await ai.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
+		messages: [
+			{ role: "system", content: `${REWRITE_INSTRUCTIONS[mode]}\n${REWRITE_RULES}` },
+			{ role: "user", content: text },
+		],
+		max_tokens: 2048,
+		temperature: 0.3,
+	})) as { response?: string };
+
+	const rewritten = response?.response?.trim();
+	if (!rewritten) return { body, changed: false };
+	// A reply wildly longer than the input means the model went off-script.
+	if (rewritten.length > Math.max(text.length * 4, 400)) return { body, changed: false };
+
+	const newEditable = isHtml ? textToHtml(rewritten) : rewritten;
+	return { body: `${newEditable}${tail}`, changed: normalizeWhitespace(rewritten) !== normalizeWhitespace(text) };
+}

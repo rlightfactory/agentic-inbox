@@ -7,6 +7,7 @@ import { cors } from "hono/cors";
 import PostalMime from "postal-mime";
 import { z } from "zod";
 import { sendEmail } from "./email-sender";
+import { rewriteDraft, type RewriteMode } from "./lib/ai";
 import { storeAttachments, type StoredAttachment } from "./lib/attachments";
 import {
 	validateSender,
@@ -367,6 +368,23 @@ app.get("/api/v1/mailboxes/:mailboxId/search", async (c: AppContext) => {
 	const emails = await stub.searchEmails({ ...searchOpts, page: intQuery(c, "page"), limit: intQuery(c, "limit") });
 	const totalCount = await stub.countSearchResults(searchOpts);
 	return c.json({ emails, totalCount });
+});
+
+// -- AI compose helpers ----------------------------------------------
+
+const REWRITE_MODES = new Set<RewriteMode>(["polish", "friendly", "shorter"]);
+
+app.post("/api/v1/mailboxes/:mailboxId/ai/rewrite", async (c: AppContext) => {
+	const input = await c.req.json().catch(() => ({})) as { body?: string; mode?: RewriteMode };
+	if (typeof input.body !== "string" || !input.body.trim()) return c.json({ error: "body is required" }, 400);
+	if (input.body.length > 100_000) return c.json({ error: "body is too large" }, 413);
+	if (!input.mode || !REWRITE_MODES.has(input.mode)) return c.json({ error: "Unknown mode" }, 400);
+	try {
+		return c.json(await rewriteDraft(c.env.AI, input.body, input.mode));
+	} catch (err) {
+		console.error("AI rewrite failed:", (err as Error).message);
+		return c.json({ error: "The AI service is unavailable right now. Please try again." }, 502);
+	}
 });
 
 // -- Contacts -------------------------------------------------------

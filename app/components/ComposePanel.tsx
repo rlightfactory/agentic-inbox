@@ -3,9 +3,12 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Banner, Button, Input } from "@cloudflare/kumo";
-import { FloppyDiskIcon, PaperPlaneTiltIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowCounterClockwiseIcon, FloppyDiskIcon, PaperPlaneTiltIcon, SparkleIcon, XIcon } from "@phosphor-icons/react";
+import { useState } from "react";
 import { useParams } from "react-router";
 import { useComposeForm } from "~/hooks/useComposeForm";
+import api from "~/services/api";
+import { stripHtml } from "~/lib/utils";
 import AttachmentPicker from "./AttachmentPicker";
 import RichTextEditor from "./RichTextEditor";
 
@@ -40,6 +43,32 @@ export default function ComposePanel() {
 		closeCompose,
 		closePanel,
 	} = useComposeForm(mailboxId, folder);
+
+	// AI helpers: rewrite the text above the quoted reply / signature.
+	type RewriteMode = "polish" | "friendly" | "shorter";
+	const [aiBusy, setAiBusy] = useState<RewriteMode | null>(null);
+	const [aiError, setAiError] = useState<string | null>(null);
+	const [bodyBeforeAi, setBodyBeforeAi] = useState<string | null>(null);
+	const hasText = stripHtml(body).length >= 10;
+
+	const runRewrite = async (mode: RewriteMode) => {
+		if (!mailboxId || aiBusy) return;
+		setAiBusy(mode);
+		setAiError(null);
+		try {
+			const result = await api.rewriteDraft(mailboxId, body, mode);
+			if (result.changed) {
+				setBodyBeforeAi(body);
+				setBody(result.body);
+			} else {
+				setAiError("The AI had nothing to change.");
+			}
+		} catch {
+			setAiError("AI is unavailable right now. Please try again.");
+		} finally {
+			setAiBusy(null);
+		}
+	};
 
 	return (
 		<div className="flex flex-col h-full bg-kumo-base">
@@ -150,6 +179,47 @@ export default function ComposePanel() {
 							onChange={setBody}
 							onAttach={addAttachments}
 						/>
+					</div>
+
+					<div className="flex flex-wrap items-center gap-1.5">
+						<span className="mr-1 inline-flex items-center gap-1 text-xs font-medium text-kumo-subtle">
+							<SparkleIcon size={14} weight="fill" className="text-kumo-link" />
+							AI
+						</span>
+						{(
+							[
+								{ mode: "polish", label: "Polish" },
+								{ mode: "friendly", label: "Friendlier" },
+								{ mode: "shorter", label: "Shorter" },
+							] as const
+						).map((pill) => (
+							<Button
+								key={pill.mode}
+								type="button"
+								variant="secondary"
+								size="sm"
+								loading={aiBusy === pill.mode}
+								disabled={!hasText || aiBusy !== null || isSending}
+								onClick={() => runRewrite(pill.mode)}
+							>
+								{pill.label}
+							</Button>
+						))}
+						{bodyBeforeAi !== null && (
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								icon={<ArrowCounterClockwiseIcon size={14} />}
+								onClick={() => {
+									setBody(bodyBeforeAi);
+									setBodyBeforeAi(null);
+								}}
+							>
+								Undo
+							</Button>
+						)}
+						{aiError && <span className="text-xs text-kumo-destructive">{aiError}</span>}
 					</div>
 
 					<AttachmentPicker

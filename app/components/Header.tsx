@@ -15,7 +15,7 @@ export default function Header() {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [searchParams] = useSearchParams();
-	const { toggleSidebar, toggleAgentPanel, isAgentPanelOpen } = useUIStore();
+	const { toggleSidebar, toggleAgentPanel, isAgentPanelOpen, openCommandPalette } = useUIStore();
 
 	// Sync search input with URL query param so it stays populated
 	const urlQuery = searchParams.get("q") || "";
@@ -83,6 +83,11 @@ export default function Header() {
 						onChange={(e) => setSearchQuery(e.target.value)}
 						onKeyDown={handleKeyDown}
 					/>
+					{!searchQuery && (
+						<kbd className="kbd pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 text-kumo-subtle md:inline-flex">
+							/
+						</kbd>
+					)}
 					{searchQuery && (
 						<button
 							type="button"
@@ -119,14 +124,33 @@ export default function Header() {
 			)}
 
 			<div className="flex items-center gap-1 ml-auto shrink-0">
-				<Tooltip content={isAgentPanelOpen ? "Hide agent panel" : "Show agent panel"} side="bottom" asChild>
+				<Tooltip content="Command palette (⌘K)" side="bottom" asChild>
 					<Button
-						variant={isAgentPanelOpen ? "secondary" : "ghost"}
-						shape="square"
-						icon={<RobotIcon size={20} />}
-						onClick={toggleAgentPanel}
-						aria-label="Toggle agent panel"
-					/>
+						variant="ghost"
+						size="sm"
+						onClick={openCommandPalette}
+						aria-label="Open command palette"
+						className="hidden md:inline-flex"
+					>
+						<kbd className="kbd">⌘K</kbd>
+					</Button>
+				</Tooltip>
+				<Tooltip content={isAgentPanelOpen ? "Hide agent panel" : "Show agent panel"} side="bottom" asChild>
+					<span className="relative inline-flex">
+						<Button
+							variant={isAgentPanelOpen ? "secondary" : "ghost"}
+							shape="square"
+							icon={<RobotIcon size={20} />}
+							onClick={toggleAgentPanel}
+							aria-label="Toggle agent panel"
+						/>
+						{isAgentPanelOpen && (
+							<span
+								aria-hidden="true"
+								className="glow-dot pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-kumo-brand"
+							/>
+						)}
+					</span>
 				</Tooltip>
 				<Tooltip content="Settings" side="bottom" asChild>
 					<Button

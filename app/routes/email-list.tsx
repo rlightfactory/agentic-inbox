@@ -714,9 +714,7 @@ export default function EmailListRoute() {
 												handleRowClick(email);
 											}
 										}}
-										className={`group flex items-center gap-3 w-full text-left cursor-pointer transition-colors border-b border-kumo-line px-4 py-2.5 md:px-5 md:py-3 ${
-											isPanelOpen ? "md:px-4 md:py-2.5" : ""
-										} ${isSelected || isChecked ? "bg-kumo-tint" : "hover:bg-kumo-tint"}`}
+										className={`group relative flex items-center gap-3 w-full text-left cursor-pointer transition-colors border-b border-kumo-line px-4 py-2.5 md:px-5 md:py-3 ${isPanelOpen ? "md:px-4 md:py-2.5" : ""} ${isSelected ? "bg-kumo-tint shadow-sm before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-kumo-brand" : isChecked ? "bg-kumo-tint" : "hover:bg-kumo-tint"}`}
 									>
 										{/* Select */}
 										<div
@@ -734,7 +732,7 @@ export default function EmailListRoute() {
 										{/* Unread dot */}
 										<div className="w-2 shrink-0 flex justify-center">
 											{unread && (
-												<div className="h-2 w-2 rounded-full bg-kumo-brand" />
+												<div className="glow-dot h-2 w-2 rounded-full bg-kumo-brand" />
 											)}
 										</div>
 
@@ -781,18 +779,18 @@ export default function EmailListRoute() {
 													</span>
 												)}
 												{(email.thread_count ?? 1) > 1 && (
-													<span className="shrink-0 text-xs text-kumo-subtle bg-kumo-fill rounded-full px-1.5 py-0.5 font-medium">
+													<span className="shrink-0 rounded-full border border-kumo-line px-1.5 text-[11px] font-medium leading-5 text-kumo-subtle">
 														{email.thread_count}
 													</span>
 												)}
 												{email.has_draft && (
-													<span className="shrink-0 text-xs text-kumo-destructive font-medium">
+													<span className="shrink-0 rounded-full bg-kumo-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-kumo-destructive">
 														Draft
 													</span>
 												)}
 												{email.needs_reply && !email.has_draft && (
 													<Tooltip content="Needs reply" asChild>
-														<span className="shrink-0 text-kumo-warning">
+														<span className="shrink-0 inline-flex items-center rounded-full bg-kumo-warning/10 px-1.5 py-0.5 text-kumo-warning">
 															<ArrowBendUpLeftIcon size={14} weight="bold" />
 														</span>
 													</Tooltip>
@@ -817,7 +815,7 @@ export default function EmailListRoute() {
 
 										{/* Row actions -- always visible on touch, hover-only on desktop */}
 										<div
-											className="flex md:hidden md:group-hover:flex items-center shrink-0"
+											className="flex md:hidden md:group-hover:flex md:group-focus-within:flex items-center shrink-0 md:absolute md:right-3 md:top-1/2 md:-translate-y-1/2 md:rounded-lg md:border md:border-kumo-line md:bg-kumo-base/90 md:px-0.5 md:shadow-sm md:backdrop-blur-sm"
 											onClick={(e) => e.stopPropagation()}
 											onKeyDown={(e) => e.stopPropagation()}
 										>

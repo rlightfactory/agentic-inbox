@@ -12,10 +12,11 @@ import {
 	Text,
 	useKumoToastManager,
 } from "@cloudflare/kumo";
-import { EnvelopeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, EnvelopeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
+import ContactAvatar from "~/components/ContactAvatar";
 import api from "~/services/api";
 import {
 	useCreateMailbox,
@@ -176,9 +177,7 @@ export default function HomeRoute() {
 									idx > 0 ? "border-t border-kumo-line" : ""
 								}`}
 							>
-								<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kumo-fill text-sm font-bold text-kumo-default">
-									{account.name.charAt(0).toUpperCase()}
-								</div>
+								<ContactAvatar label={account.name} email={account.email} size={40} />
 								<div className="min-w-0 flex-1">
 									<div className="text-sm font-medium text-kumo-default truncate">
 										{account.name}
@@ -187,6 +186,10 @@ export default function HomeRoute() {
 										{account.email}
 									</div>
 								</div>
+								<CaretRightIcon
+									size={16}
+									className="shrink-0 text-kumo-subtle transition-transform group-hover:translate-x-1 group-hover:text-kumo-default"
+								/>
 								{!isConfigured && (
 									<Button
 										variant="ghost"

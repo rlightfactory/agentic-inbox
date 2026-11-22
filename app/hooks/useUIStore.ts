@@ -33,6 +33,11 @@ interface UIState {
 	closeSidebar: () => void;
 	toggleSidebar: () => void;
 
+	// Command palette (Cmd/Ctrl+K)
+	isCommandPaletteOpen: boolean;
+	openCommandPalette: () => void;
+	closeCommandPalette: () => void;
+
 	// Agent panel
 	isAgentPanelOpen: boolean;
 	toggleAgentPanel: () => void;
@@ -52,6 +57,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 	isComposeModalOpen: false,
 	isSidebarOpen: false,
 	isAgentPanelOpen: true,
+	isCommandPaletteOpen: false,
 
 	selectEmail: (id) => set({ selectedEmailId: id, isComposing: false }),
 
@@ -82,6 +88,9 @@ export const useUIStore = create<UIState>((set, get) => ({
 	openSidebar: () => set({ isSidebarOpen: true }),
 	closeSidebar: () => set({ isSidebarOpen: false }),
 	toggleSidebar: () => set({ isSidebarOpen: !get().isSidebarOpen }),
+
+	openCommandPalette: () => set({ isCommandPaletteOpen: true }),
+	closeCommandPalette: () => set({ isCommandPaletteOpen: false }),
 
 	toggleAgentPanel: () => set({ isAgentPanelOpen: !get().isAgentPanelOpen }),
 	closeAgentPanel: () => set({ isAgentPanelOpen: false }),

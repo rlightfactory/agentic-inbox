@@ -2,7 +2,8 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Dialog, Input, Tooltip } from "@cloudflare/kumo";
+import ContactAvatar from "~/components/ContactAvatar";
+import { Button, Dialog, Input, Tooltip } from "@cloudflare/kumo";
 import {
 	ArchiveIcon,
 	CaretLeftIcon,
@@ -57,17 +58,29 @@ function FolderLink({
 			to={to}
 			onClick={onClick}
 			className={({ isActive }) =>
-				`flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors ${
+				`relative flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors ${
 					isActive
 						? "bg-kumo-fill font-semibold text-kumo-default"
 						: "text-kumo-strong hover:bg-kumo-tint"
 				}`
 			}
 		>
-			<span className="shrink-0">{icon}</span>
-			<span className="truncate flex-1">{label}</span>
-			{unreadCount != null && unreadCount > 0 && (
-				<Badge variant="secondary">{unreadCount}</Badge>
+			{({ isActive }) => (
+				<>
+					{isActive && (
+						<span
+							aria-hidden="true"
+							className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-kumo-brand"
+						/>
+					)}
+					<span className="shrink-0">{icon}</span>
+					<span className="truncate flex-1">{label}</span>
+					{unreadCount != null && unreadCount > 0 && (
+						<span className="min-w-[1.4rem] rounded-full bg-kumo-brand px-1.5 py-0.5 text-center text-xs font-semibold tabular-nums leading-none text-kumo-inverse">
+							{unreadCount}
+						</span>
+					)}
+				</>
 			)}
 		</NavLink>
 	);
@@ -130,17 +143,24 @@ export default function Sidebar() {
 						navigate("/");
 						closeSidebar();
 					}}
-					className="flex items-center gap-1.5 text-kumo-subtle text-sm hover:text-kumo-default transition-colors mb-2.5 cursor-pointer bg-transparent border-0 p-0"
+					className="-ml-1.5 mb-2 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default cursor-pointer bg-transparent border-0"
 				>
 					<CaretLeftIcon size={14} />
-					<span>Mailboxes</span>
+					<span>All Mailboxes</span>
 				</button>
-				<div className="px-1">
-					<div className="text-base font-semibold text-kumo-default truncate">
-						{displayName}
-					</div>
-					<div className="text-sm text-kumo-subtle truncate mt-0.5">
-						{currentMailbox?.email || mailboxId}
+				<div className="flex items-center gap-3 rounded-xl border border-kumo-line bg-kumo-base p-3">
+					<ContactAvatar
+						label={displayName}
+						email={currentMailbox?.email || mailboxId || displayName}
+						size={36}
+					/>
+					<div className="min-w-0">
+						<div className="text-sm font-semibold text-kumo-default truncate">
+							{displayName}
+						</div>
+						<div className="text-xs text-kumo-subtle truncate mt-0.5">
+							{currentMailbox?.email || mailboxId}
+						</div>
 					</div>
 				</div>
 			</div>
@@ -153,7 +173,10 @@ export default function Sidebar() {
 					onClick={() => startCompose()}
 					className="w-full"
 				>
-					Compose
+					<span className="flex w-full items-center justify-between gap-3">
+						<span>Compose</span>
+						<kbd className="kbd hidden md:inline-flex">C</kbd>
+					</span>
 				</Button>
 			</div>
 
