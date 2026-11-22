@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import DOMPurify from "dompurify";
+import { cleanLeakedCss } from "shared/html";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface EmailIframeProps {
@@ -59,7 +60,7 @@ export default function EmailIframe({ body, autoSize }: EmailIframeProps) {
 		const iframe = iframeRef.current;
 		if (!iframe || !body) return;
 
-		const cleanBody = DOMPurify.sanitize(body, {
+		const cleanBody = DOMPurify.sanitize(cleanLeakedCss(body), {
 			USE_PROFILES: { html: true },
 			FORBID_TAGS: ["style"],
 			ADD_ATTR: ["target"],

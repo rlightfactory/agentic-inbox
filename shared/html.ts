@@ -77,3 +77,33 @@ function decodeEntities(text: string): string {
 		return NAMED_ENTITIES[body.toLowerCase()] ?? match;
 	});
 }
+
+/**
+ * Repair reply quotes written by an older version that kept the original
+ * email's <style> content as text.
+ *
+ * Those stored replies contain a <blockquote> whose text includes whole CSS
+ * (comments like `/* GLOBAL *\/` and rules like `img { max-width: 100%; }`),
+ * and entities that were escaped twice (`&amp;#39;`). The repair only touches
+ * blockquotes that contain both a CSS comment and a CSS rule, so ordinary
+ * quoted text is never altered.
+ */
+export function cleanLeakedCss(html: string): string {
+	if (!html || !html.includes("/*")) return html;
+	return html.replace(/<blockquote\b[^>]*>[\s\S]*?<\/blockquote>/gi, (block) => {
+		const hasComment = /\/\*[\s\S]*?\*\//.test(block);
+		const hasRule = /[^{}<>]*\{[^{}]*:[^{}]*;[^{}]*\}/.test(block);
+		if (!hasComment || !hasRule) return block;
+		// A CSS comment marks a boundary, so prose in front of it ("A new
+		// submission") is never mistaken for the selector of the next rule.
+		const BOUNDARY = "\u0001";
+		return block
+			.replace(/\/\*[\s\S]*?\*\//g, BOUNDARY)
+			// @media blocks hold nested rules, so remove them before plain rules
+			.replace(/@(?:media|supports|font-face|keyframes|-webkit-keyframes|import|page|charset)\b[^{};\u0001]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/gi, " ")
+			.replace(/[^{}<>;\u0001]*\{[^{}]*\}/g, " ")
+			.replace(/\u0001/g, " ")
+			.replace(/&amp;(#\d+|#x[0-9a-f]+|amp|lt|gt|quot|apos|nbsp);/gi, "&$1;")
+			.replace(/[ \t]{2,}/g, " ");
+	});
+}
